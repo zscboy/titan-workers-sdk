@@ -1,4 +1,4 @@
-module github.com/zscboy/workerd-sdk
+module github.com/zscboy/titan-workers-sdk
 
 go 1.21.6
 

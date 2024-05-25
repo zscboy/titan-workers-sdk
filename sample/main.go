@@ -6,8 +6,8 @@ import (
 
 	logging "github.com/ipfs/go-log/v2"
 
-	"github.com/zscboy/workerd-sdk/proxy"
-	"github.com/zscboy/workerd-sdk/socks5"
+	"github.com/zscboy/titan-workers-sdk/proxy"
+	"github.com/zscboy/titan-workers-sdk/socks5"
 	// "github.com/txthinking/socks5"
 )
 
@@ -32,6 +32,10 @@ func connectHandler(conn net.Conn, req *socks5.Request) error {
 }
 
 func main() {
+	startProxy()
+}
+
+func startProxy() {
 	logging.SetDebugLogging()
 	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, url)
 	tunMgr.Startup()
