@@ -1,4 +1,4 @@
-package workerdsdk
+package proxy
 
 import (
 	"encoding/binary"
