@@ -125,7 +125,7 @@ func (t *Tunnel) onTunnelMsg(message []byte) error {
 }
 
 func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
-	log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
+	//log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
 
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
@@ -158,7 +158,7 @@ func (t *Tunnel) onAcceptRequest(conn net.Conn, dest *DestAddr) error {
 	return t.serveConn(conn, req.idx, req.tag)
 }
 
-func (tm *TunMgr) OnAcceptHTTPsRequest(conn net.Conn, dest *DestAddr, header []byte) {
+func (tm *TunMgr) OnAcceptHTTPsRequest(conn net.Conn, dest *DestAddr) {
 	// allocate tunnel for sock
 	tun := tm.allocTunnelForRequest()
 	if tun == nil {
@@ -166,7 +166,7 @@ func (tm *TunMgr) OnAcceptHTTPsRequest(conn net.Conn, dest *DestAddr, header []b
 		return
 	}
 
-	if err := tun.onAcceptHTTPsRequest(conn, dest, header); err != nil {
+	if err := tun.onAcceptHTTPsRequest(conn, dest); err != nil {
 		log.Errorf("onAcceptHTTPRequest %s", err.Error())
 	}
 }
@@ -221,21 +221,7 @@ func (t *Tunnel) serveConn(conn net.Conn, idx uint16, tag uint16) error {
 }
 
 func (t *Tunnel) serveHTTPRequest(conn net.Conn, idx uint16, tag uint16) error {
-	buf := make([]byte, 4096)
-	for {
-		n, err := conn.Read(buf)
-		if err != nil {
-			// log.Println("proxy read failed:", err)
-			return t.onClientRecvClose(idx, tag)
-		}
-
-		if n == 0 {
-			// log.Println("proxy read, server half close")
-			return t.onClientRecvFinished(idx, tag)
-		}
-
-		t.onClientRecvData(idx, tag, buf[:n])
-	}
+	return t.onClientRecvFinished(idx, tag)
 }
 
 func (t *Tunnel) onClientRecvClose(idx, tag uint16) error {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/zscboy/titan-workers-sdk/proxy"
+	"io"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -13,8 +14,9 @@ import (
 var log = logging.Logger("http")
 
 const (
-	defaultHTTPPort    = 80
-	defaultHTTPsScheme = "https://"
+	defaultHTTPPort = 80
+	httpScheme      = "http://"
+	httpsScheme     = "https://"
 )
 
 type ProxyServer struct {
@@ -40,15 +42,39 @@ func (p *ProxyServer) Start() {
 
 func proxyHandler(tm *proxy.TunMgr) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodConnect {
-			http.NotFound(w, r)
+		if r.Method == http.MethodConnect {
+			handleHTTPSRequest(w, r, tm)
 			return
 		}
-		handleRequest(w, r, tm)
+		handleHTTPRequest(w, r, tm)
 	}
 }
 
-func handleRequest(w http.ResponseWriter, r *http.Request, tm *proxy.TunMgr) {
+func handleHTTPRequest(w http.ResponseWriter, r *http.Request, tm *proxy.TunMgr) {
+	info, err := parseRequestInfo(r)
+	if err != nil {
+		http.Error(w, "Invalid request URL", http.StatusBadRequest)
+		return
+	}
+
+	log.Infof("accept http, srcAddr: %s, srcPort: %s, dstAddr: %s, dstPort: %d",
+		info.srcAddr, info.srcPort, info.dstAddr, info.dstPort)
+
+	strHead := buildRequestHeader(r)
+
+	conn := newConn()
+	defer conn.Close()
+
+	tm.OnAcceptHTTPRequest(conn, &proxy.DestAddr{Addr: info.dstAddr, Port: info.dstPort}, []byte(strHead))
+
+	_, err = io.Copy(w, conn)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+}
+
+func handleHTTPSRequest(w http.ResponseWriter, r *http.Request, tm *proxy.TunMgr) {
 	info, err := parseRequestInfo(r)
 	if err != nil {
 		http.Error(w, "Invalid request URL", http.StatusBadRequest)
@@ -71,21 +97,22 @@ func handleRequest(w http.ResponseWriter, r *http.Request, tm *proxy.TunMgr) {
 	}
 	defer conn.Close()
 
-	tm.OnAcceptHTTPsRequest(conn, &proxy.DestAddr{Addr: info.dstAddr, Port: info.dstPort}, nil)
-
-	strHead := buildRequestHeader(r, info.dstAddr)
-
-	tm.OnAcceptHTTPRequest(conn, &proxy.DestAddr{Addr: info.dstAddr, Port: info.dstPort}, []byte(strHead))
+	tm.OnAcceptHTTPsRequest(conn, &proxy.DestAddr{Addr: info.dstAddr, Port: info.dstPort})
 }
 
 func parseRequestInfo(r *http.Request) (*struct {
 	srcAddr, srcPort, dstAddr string
 	dstPort                   int
 }, error) {
-	srvUrl, err := url.Parse(defaultHTTPsScheme + r.RequestURI)
+	if !strings.HasPrefix(r.RequestURI, "http") {
+		r.RequestURI = httpScheme + r.RequestURI
+	}
+
+	srvUrl, err := url.Parse(r.RequestURI)
 	if err != nil {
 		return nil, err
 	}
+
 	dstPort := defaultHTTPPort
 	if port := srvUrl.Port(); port != "" {
 		dstPort, _ = strconv.Atoi(port)
@@ -101,11 +128,14 @@ func parseRequestInfo(r *http.Request) (*struct {
 	}, nil
 }
 
-func buildRequestHeader(r *http.Request, dstAddr string) string {
-	strHead := fmt.Sprintf("%s %s HTTP/%s\r\n", r.Method, dstAddr, r.Proto)
-	for k, v := range r.Header {
-		strHead += fmt.Sprintf("%s: %s\r\n", k, strings.Join(v, ", "))
+func buildRequestHeader(r *http.Request) string {
+	headerString := fmt.Sprintf("%s %s %s\r\n", r.Method, r.URL.String(), r.Proto)
+	headerString += fmt.Sprintf("Host: %s\r\n", r.RemoteAddr)
+	for name, values := range r.Header {
+		for _, value := range values {
+			headerString += fmt.Sprintf("%s: %s\r\n", name, value)
+		}
 	}
-	strHead += "\r\n"
-	return strHead
+	headerString += "\r\n"
+	return headerString
 }

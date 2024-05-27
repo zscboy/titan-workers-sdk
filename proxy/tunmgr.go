@@ -69,7 +69,8 @@ func (tm *TunMgr) OnAcceptRequest(conn net.Conn, dest *DestAddr) {
 	}
 }
 
-func (t *Tunnel) onAcceptHTTPsRequest(conn net.Conn, dest *DestAddr, header []byte) error {
+func (t *Tunnel) onAcceptHTTPsRequest(conn net.Conn, dest *DestAddr) error {
+	log.Infof("onAcceptHTTPsRequest, dest addr %s port %d", dest.Addr, dest.Port)
 	req, err := t.acceptRequestInternal(conn, dest)
 	if err != nil {
 		return err
@@ -82,7 +83,7 @@ func (t *Tunnel) onAcceptHTTPsRequest(conn net.Conn, dest *DestAddr, header []by
 		return err
 	}
 
-	return t.onClientRecvData(req.idx, req.tag, header)
+	return t.serveConn(conn, req.idx, req.tag)
 }
 
 func (t *Tunnel) onAcceptHTTPRequest(conn net.Conn, dest *DestAddr, header []byte) error {
@@ -92,10 +93,7 @@ func (t *Tunnel) onAcceptHTTPRequest(conn net.Conn, dest *DestAddr, header []byt
 		return err
 	}
 
-	err = t.serveHTTPRequest(conn, req.idx, req.tag)
-	if err != nil {
-		return err
-	}
+	defer t.onClientRecvFinished(req.idx, req.tag)
 
 	return t.onClientRecvData(req.idx, req.tag, header)
 }
