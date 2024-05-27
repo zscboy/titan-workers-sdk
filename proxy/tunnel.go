@@ -30,7 +30,6 @@ type Tunnel struct {
 	uuid   string
 	idx    int
 	tunmgr *TunMgr
-	url    string
 	cap    int
 	conn   *websocket.Conn
 	// lastActivitTime time.Time
@@ -39,12 +38,11 @@ type Tunnel struct {
 	busy      int
 }
 
-func newTunnel(uuid string, idx int, tunmgr *TunMgr, url string, cap int) *Tunnel {
+func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
 	return &Tunnel{
 		uuid:      uuid,
 		idx:       idx,
 		tunmgr:    tunmgr,
-		url:       url,
 		cap:       cap,
 		writeLock: sync.Mutex{},
 		reqq:      newReqq(cap),
@@ -54,7 +52,12 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, url string, cap int) *Tunne
 func (t *Tunnel) connect() error {
 	defer t.onWebsocketClose()
 
-	url := fmt.Sprintf("%s?cap=%d&uuid=%s", t.url, t.cap, t.uuid)
+	url, err := t.tunmgr.getServerURL()
+	if err != nil {
+		return err
+	}
+
+	url = fmt.Sprintf("%s?cap=%d&uuid=%s", url, t.cap, t.uuid)
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return fmt.Errorf("dial %s failed %s", url, err.Error())

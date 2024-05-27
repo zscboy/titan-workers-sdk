@@ -22,20 +22,33 @@ type DestAddr struct {
 }
 
 type TunMgr struct {
-	uuid           string
-	tunnelCount    int
-	tunnelCap      int
-	url            string
+	uuid        string
+	tunnelCount int
+	tunnelCap   int
+	// url            string
 	tunnels        []*Tunnel
 	reconnects     []int
 	sortedTunnels  []*Tunnel
 	currentTunIdex int
 
 	reconnectsLock sync.Mutex
+
+	accessPoint AccessPoint
 }
 
-func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string) *TunMgr {
-	return &TunMgr{uuid: uuid, tunnelCount: tunnelCount, tunnelCap: tunnelCap, url: url, reconnects: make([]int, 0), reconnectsLock: sync.Mutex{}}
+func NewTunManager(uuid string, tunnelCount, tunnelCap int, ap AccessPoint) *TunMgr {
+	if ap == nil {
+		panic("access point can not empty")
+	}
+
+	return &TunMgr{
+		uuid:           uuid,
+		tunnelCount:    tunnelCount,
+		tunnelCap:      tunnelCap,
+		reconnects:     make([]int, 0),
+		reconnectsLock: sync.Mutex{},
+		accessPoint:    ap,
+	}
 }
 
 func (tm *TunMgr) Startup() {
@@ -43,7 +56,7 @@ func (tm *TunMgr) Startup() {
 	tm.sortedTunnels = make([]*Tunnel, 0, tm.tunnelCount)
 
 	for i := 0; i < tm.tunnelCount; i++ {
-		tunnel := newTunnel(tm.uuid, i, tm, tm.url, tm.tunnelCap)
+		tunnel := newTunnel(tm.uuid, i, tm, tm.tunnelCap)
 		tm.tunnels = append(tm.tunnels, tunnel)
 		tm.sortedTunnels = append(tm.sortedTunnels, tunnel)
 
@@ -218,4 +231,8 @@ func (tm *TunMgr) onTunnelBroken(tun *Tunnel) {
 	tm.reconnectsLock.Lock()
 	defer tm.reconnectsLock.Unlock()
 	tm.reconnects = append(tm.reconnects, tun.idx)
+}
+
+func (tm *TunMgr) getServerURL() (string, error) {
+	return tm.accessPoint.GetServerURL()
 }

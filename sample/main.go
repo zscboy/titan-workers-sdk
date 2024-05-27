@@ -39,7 +39,7 @@ func main() {
 
 func startProxy() {
 	logging.SetDebugLogging()
-	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, url)
+	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, nil)
 	tunMgr.Startup()
 
 	go func() {
