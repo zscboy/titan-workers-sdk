@@ -136,7 +136,7 @@ func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
 }
 
 func (t *Tunnel) onServerRecvFinish(idx, tag uint16) error {
-	log.Infof("onServerRequestFinish, idx:%d tag:%d", idx, tag)
+	log.Debugf("onServerRequestFinish, idx:%d tag:%d", idx, tag)
 
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
@@ -146,43 +146,17 @@ func (t *Tunnel) onServerRecvFinish(idx, tag uint16) error {
 }
 
 func (t *Tunnel) onServerRecvClose(idx, tag uint16) {
-	log.Infof("onServerRequestClose, idx:%d tag:%d", idx, tag)
+	log.Debugf("onServerRequestClose, idx:%d tag:%d", idx, tag)
 	t.reqq.free(idx, tag)
 }
 
 func (t *Tunnel) onAcceptRequest(conn net.Conn, dest *DestAddr) error {
-	log.Infof("onAcceptRequest, dest addr %s port %d", dest.Addr, dest.Port)
+	log.Debugf("onAcceptRequest, dest addr %s port %d", dest.Addr, dest.Port)
 	req, err := t.acceptRequestInternal(conn, dest)
 	if err != nil {
 		return err
 	}
 	return t.serveConn(conn, req.idx, req.tag)
-}
-
-func (tm *TunMgr) OnAcceptHTTPsRequest(conn net.Conn, dest *DestAddr) {
-	// allocate tunnel for sock
-	tun := tm.allocTunnelForRequest()
-	if tun == nil {
-		log.Errorf("[TunMgr] failed to alloc tunnel for sock, discard it")
-		return
-	}
-
-	if err := tun.onAcceptHTTPsRequest(conn, dest); err != nil {
-		log.Errorf("onAcceptHTTPRequest %s", err.Error())
-	}
-}
-
-func (tm *TunMgr) OnAcceptHTTPRequest(conn net.Conn, dest *DestAddr, header []byte) {
-	// allocate tunnel for sock
-	tun := tm.allocTunnelForRequest()
-	if tun == nil {
-		log.Errorf("[TunMgr] failed to alloc tunnel for sock, discard it")
-		return
-	}
-
-	if err := tun.onAcceptHTTPRequest(conn, dest, header); err != nil {
-		log.Errorf("onAcceptHTTPRequest %s", err.Error())
-	}
 }
 
 func (t *Tunnel) acceptRequestInternal(conn net.Conn, destAddr *DestAddr) (*Request, error) {
@@ -226,7 +200,7 @@ func (t *Tunnel) serveHTTPRequest(conn net.Conn, idx uint16, tag uint16) error {
 }
 
 func (t *Tunnel) onClientRecvClose(idx, tag uint16) error {
-	log.Infof("onClientClose idx:%d tag:%d", idx, tag)
+	log.Debugf("onClientClose idx:%d tag:%d", idx, tag)
 	t.reqq.free(idx, tag)
 	return t.sendCtl2Server(uint8(cMDReqClientClosed), idx, tag)
 }

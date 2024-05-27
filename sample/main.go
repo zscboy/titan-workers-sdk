@@ -2,13 +2,14 @@ package main
 
 import (
 	"fmt"
-	"github.com/zscboy/titan-workers-sdk/http"
 	"net"
+
+	"github.com/zscboy/titan-workers-sdk/http"
 
 	logging "github.com/ipfs/go-log/v2"
 
+	socks5 "github.com/zscboy/go-socks5"
 	"github.com/zscboy/titan-workers-sdk/proxy"
-	"github.com/zscboy/titan-workers-sdk/socks5"
 	// "github.com/txthinking/socks5"
 )
 
@@ -50,14 +51,14 @@ func startProxy() {
 }
 
 func startSocks5Server(address string) {
-	conf := &socks5.Config{ConnectHandler: connectHandler}
+	conf := &socks5.Config{CustomConnectHandler: connectHandler}
 	server, err := socks5.New(conf)
 	if err != nil {
 		panic(err)
 	}
 
 	// Create SOCKS5 proxy on localhost port 8000
-	fmt.Println("listen on ", address)
+	fmt.Println("socks5 listen on ", address)
 	if err := server.ListenAndServe("tcp", address); err != nil {
 		panic(err)
 	}

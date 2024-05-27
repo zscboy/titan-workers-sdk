@@ -72,8 +72,35 @@ func (tm *TunMgr) OnAcceptRequest(conn net.Conn, dest *DestAddr) {
 	}
 }
 
+func (tm *TunMgr) OnAcceptHTTPsRequest(conn net.Conn, dest *DestAddr) {
+	// allocate tunnel for sock
+	tun := tm.allocTunnelForRequest()
+	if tun == nil {
+		log.Errorf("[TunMgr] failed to alloc tunnel for sock, discard it")
+		return
+	}
+
+	if err := tun.onAcceptHTTPsRequest(conn, dest); err != nil {
+		log.Errorf("onAcceptHTTPRequest %s", err.Error())
+	}
+}
+
+func (tm *TunMgr) OnAcceptHTTPRequest(conn net.Conn, dest *DestAddr, header []byte) {
+	// allocate tunnel for sock
+	tun := tm.allocTunnelForRequest()
+	if tun == nil {
+		log.Errorf("[TunMgr] failed to alloc tunnel for sock, discard it")
+		return
+	}
+
+	if err := tun.onAcceptHTTPRequest(conn, dest, header); err != nil {
+		log.Errorf("onAcceptHTTPRequest %s", err.Error())
+	}
+}
+
 func (t *Tunnel) onAcceptHTTPsRequest(conn net.Conn, dest *DestAddr) error {
 	log.Infof("onAcceptHTTPsRequest, dest addr %s port %d", dest.Addr, dest.Port)
+
 	req, err := t.acceptRequestInternal(conn, dest)
 	if err != nil {
 		return err
@@ -170,7 +197,6 @@ func (tm *TunMgr) keepAlive() {
 		reconnects := append([]int{}, tm.reconnects...)
 		tm.reconnects = make([]int, 0)
 		tm.reconnectsLock.Unlock()
-		log.Infof("reconnects %#v", reconnects)
 
 		for _, idx := range reconnects {
 			tun := tm.tunnels[idx]
