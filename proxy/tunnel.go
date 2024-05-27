@@ -52,6 +52,8 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, url string, cap int) *Tunne
 }
 
 func (t *Tunnel) connect() error {
+	defer t.onWebsocketClose()
+
 	url := fmt.Sprintf("%s?cap=%d&uuid=%s", t.url, t.cap, t.uuid)
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -62,8 +64,6 @@ func (t *Tunnel) connect() error {
 	t.conn = conn
 
 	log.Infof("new tun %s", url)
-
-	defer t.onWebsocketClose()
 
 	// conn.SetPongHandler(tc.onPone)
 	// go tc.keepalive()
@@ -94,10 +94,11 @@ func (t *Tunnel) sendPing() error {
 }
 
 func (t *Tunnel) onWebsocketClose() {
-	if t.conn == nil {
-		return
+	if t.conn != nil {
+		t.conn = nil
 	}
 	t.tunmgr.onTunnelBroken(t)
+
 }
 
 func (t *Tunnel) resetBusy() {

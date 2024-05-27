@@ -3,15 +3,16 @@ package proxy
 import (
 	"net"
 	"sort"
+	"sync"
 	"time"
 
 	logging "github.com/ipfs/go-log/v2"
 )
 
-var log = logging.Logger("workerdsdk")
+var log = logging.Logger("proxy")
 
 const (
-	keepaliveIntervel = 15 * time.Second
+	keepaliveIntervel = 3 * time.Second
 	sortIntervel      = 3 * time.Second
 )
 
@@ -29,10 +30,12 @@ type TunMgr struct {
 	reconnects     []int
 	sortedTunnels  []*Tunnel
 	currentTunIdex int
+
+	reconnectsLock sync.Mutex
 }
 
 func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string) *TunMgr {
-	return &TunMgr{uuid: uuid, tunnelCount: tunnelCount, tunnelCap: tunnelCap, url: url, reconnects: make([]int, 0)}
+	return &TunMgr{uuid: uuid, tunnelCount: tunnelCount, tunnelCap: tunnelCap, url: url, reconnects: make([]int, 0), reconnectsLock: sync.Mutex{}}
 }
 
 func (tm *TunMgr) Startup() {
@@ -163,21 +166,30 @@ func (tm *TunMgr) keepAlive() {
 			tun.sendPing()
 		}
 
-		reconnects := tm.reconnects
+		tm.reconnectsLock.Lock()
+		reconnects := append([]int{}, tm.reconnects...)
 		tm.reconnects = make([]int, 0)
+		tm.reconnectsLock.Unlock()
+		log.Infof("reconnects %#v", reconnects)
 
-		length = len(reconnects)
-		for i := 0; i < length; i++ {
-			idx := reconnects[i]
+		for _, idx := range reconnects {
 			tun := tm.tunnels[idx]
 			if tun.isConnected() {
+				log.Infof("tun %s is connected, not need to reconnect", tun.idx)
 				continue
 			}
-			go tun.connect()
+
+			go func() {
+				if err := tun.connect(); err != nil {
+					log.Errorf("reconnect failed %s", err.Error())
+				}
+			}()
 		}
 	}
 }
 
 func (tm *TunMgr) onTunnelBroken(tun *Tunnel) {
+	tm.reconnectsLock.Lock()
+	defer tm.reconnectsLock.Unlock()
 	tm.reconnects = append(tm.reconnects, tun.idx)
 }
