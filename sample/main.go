@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/zscboy/titan-workers-sdk/http"
 	"net"
 
 	logging "github.com/ipfs/go-log/v2"
@@ -39,6 +40,11 @@ func startProxy() {
 	logging.SetDebugLogging()
 	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, url)
 	tunMgr.Startup()
+
+	go func() {
+		httpProxy := http.NewProxyServer(fmt.Sprintf(":%d", httpPort), tunMgr)
+		httpProxy.Start()
+	}()
 
 	startSocks5Server("127.0.0.1:8000")
 }

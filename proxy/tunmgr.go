@@ -69,12 +69,35 @@ func (tm *TunMgr) OnAcceptRequest(conn net.Conn, dest *DestAddr) {
 	}
 }
 
-func (tm *TunMgr) onAcceptHTTPsRequest() {
+func (t *Tunnel) onAcceptHTTPsRequest(conn net.Conn, dest *DestAddr, header []byte) error {
+	req, err := t.acceptRequestInternal(conn, dest)
+	if err != nil {
+		return err
+	}
 
+	_, err = conn.Write([]byte("HTTP/1.1 200 Connection Established\r\n" +
+		"Proxy-agent: linproxy\r\n" +
+		"\r\n"))
+	if err != nil {
+		return err
+	}
+
+	return t.onClientRecvData(req.idx, req.tag, header)
 }
 
-func (tm *TunMgr) onAcceptHTTPRequest() {
+func (t *Tunnel) onAcceptHTTPRequest(conn net.Conn, dest *DestAddr, header []byte) error {
+	log.Infof("onAcceptHTTPRequest, dest addr %s port %d", dest.Addr, dest.Port)
+	req, err := t.acceptRequestInternal(conn, dest)
+	if err != nil {
+		return err
+	}
 
+	err = t.serveHTTPRequest(conn, req.idx, req.tag)
+	if err != nil {
+		return err
+	}
+
+	return t.onClientRecvData(req.idx, req.tag, header)
 }
 
 func (tm *TunMgr) allocTunnelForRequest() *Tunnel {
