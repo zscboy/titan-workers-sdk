@@ -39,7 +39,7 @@ func main() {
 
 func startProxy() {
 	logging.SetDebugLogging()
-	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, nil)
+	tunMgr = proxy.NewTunManager(uuid, tunnelCount, tunnelCap, &customAccessPoint{ServerURL: url})
 	tunMgr.Startup()
 
 	go func() {
@@ -62,4 +62,15 @@ func startSocks5Server(address string) {
 	if err := server.ListenAndServe("tcp", address); err != nil {
 		panic(err)
 	}
+}
+
+type customAccessPoint struct {
+	ServerURL string
+}
+
+func (ap *customAccessPoint) GetServerURL() (string, error) {
+	return ap.ServerURL, nil
+}
+func (ap *customAccessPoint) RefreshServerURL() {
+
 }
