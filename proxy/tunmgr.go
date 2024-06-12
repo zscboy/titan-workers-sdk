@@ -12,7 +12,7 @@ import (
 var log = logging.Logger("proxy")
 
 const (
-	keepaliveIntervel = 3 * time.Second
+	keepaliveIntervel = 15 * time.Second
 	sortIntervel      = 3 * time.Second
 )
 

@@ -14,12 +14,13 @@ import (
 )
 
 const (
-	socks5Port  = 8000
-	httpPort    = 8001
+	socks5Port  = 1080
+	httpPort    = 1081
 	uuid        = "ee80e87b-fc41-4e59-a722-7c3fee039cb4"
-	tunnelCount = 10
+	tunnelCount = 1
 	tunnelCap   = 100
-	url         = "ws://localhost:8020/tun"
+	// url         = "wss://4a6a158a-3788-48b7-a0ab-f936afd778c2.test.titannet.io:2345/project/e_85a7e089-0ce4-4337-94ca-763587a07f45/3455465e-02b6-49de-b326-773a7fe5f424/tun"
+	url = "wss://4a6a158a-3788-48b7-a0ab-f936afd778c2.test.titannet.io:2345/project/e_85a7e089-0ce4-4337-94ca-763587a07f45/3455465e-02b6-49de-b326-773a7fe5f424/tun"
 )
 
 var tunMgr *proxy.TunMgr
@@ -27,8 +28,12 @@ var tunMgr *proxy.TunMgr
 func connectHandler(conn net.Conn, req *socks5.Request) error {
 	defer conn.Close()
 
-	fmt.Println("dest addrss ", *req.DestAddr)
-	tunMgr.OnAcceptRequest(conn, &proxy.DestAddr{Addr: req.DestAddr.IP.String(), Port: req.DestAddr.Port})
+	fmt.Println("on socks5 connect ", *req.DestAddr)
+	addr := req.DestAddr.IP.String()
+	if len(req.DestAddr.FQDN) > 0 {
+		addr = req.DestAddr.FQDN
+	}
+	tunMgr.OnAcceptRequest(conn, &proxy.DestAddr{Addr: addr, Port: req.DestAddr.Port})
 
 	return nil
 }
@@ -47,7 +52,7 @@ func startProxy() {
 		httpProxy.Start()
 	}()
 
-	startSocks5Server("127.0.0.1:8000")
+	startSocks5Server(fmt.Sprintf("localhost:%d", socks5Port))
 }
 
 func startSocks5Server(address string) {

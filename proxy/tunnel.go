@@ -3,6 +3,7 @@ package proxy
 import (
 	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strings"
@@ -16,13 +17,39 @@ type CMD int
 
 const (
 	cMDNone              = 0
-	cMDReqData           = 1
-	cMDReqCreated        = 2
-	cMDReqClientClosed   = 3
-	cMDReqClientFinished = 4
-	cMDReqServerFinished = 5
-	cMDReqServerClosed   = 6
+	cMDPing              = 1
+	cMDPong              = 2
+	cMReqBegin           = 3
+	cMDReqData           = 3
+	cMDReqCreated        = 4
+	cMDReqClientClosed   = 5
+	cMDReqClientFinished = 6
+	cMDReqServerFinished = 7
+	cMDReqServerClosed   = 8
+	cMDReqRefreshQuota   = 9
+	cMDReqEnd            = 10
 )
+
+// const CMD_None = 0;
+// const CMD_Ping = 1;
+// const CMD_Pong = 2;
+// const CMD_ReqBEGIN = 3;
+// // client and server use this cmd to send request's data
+// const CMD_ReqData = 3;
+// // client notify server that a new request has created
+// const CMD_ReqCreated = 4;
+// // client notify server that a request has closed
+// const CMD_ReqClientClosed = 5;
+// // client notify server that a request has finished, but not closed
+// const CMD_ReqClientFinished = 6;
+// // server notify client that a request has finished, but not closed
+// const CMD_ReqServerFinished = 7;
+// // server notify client that a request has closed
+// const CMD_ReqServerClosed = 8;
+// // server notify client that a request quota has been refresh,
+// // means that client can send more data of this request
+// const CMD_ReqRefreshQuota = 9;
+// const CMD_ReqEND = 10;
 
 const maxCap = 100
 
@@ -58,8 +85,12 @@ func (t *Tunnel) connect() error {
 	}
 
 	url = fmt.Sprintf("%s?cap=%d&uuid=%s", url, t.cap, t.uuid)
-	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	conn, resp, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
+		if resp != nil {
+			body, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("dial %s failed %s, rsp: %s", url, err.Error(), string(body))
+		}
 		return fmt.Errorf("dial %s failed %s", url, err.Error())
 	}
 	defer conn.Close()
@@ -91,9 +122,17 @@ func (t *Tunnel) connect() error {
 
 func (t *Tunnel) sendPing() error {
 	now := time.Now()
-	buf := make([]byte, 8)
-	binary.LittleEndian.PutUint64(buf[0:], uint64(now.Unix()))
-	return t.conn.WriteMessage(websocket.PingMessage, buf)
+	buf := make([]byte, 9)
+	buf[0] = byte(cMDPing)
+	binary.LittleEndian.PutUint64(buf[1:], uint64(now.Unix()))
+	return t.write(buf)
+}
+
+func (t *Tunnel) sendPong(data []byte) error {
+	buf := make([]byte, len(data))
+	buf[0] = byte(cMDPong)
+	copy(buf[1:], data[1:])
+	return t.write(buf)
 }
 
 func (t *Tunnel) onWebsocketClose() {
@@ -109,7 +148,43 @@ func (t *Tunnel) resetBusy() {
 }
 
 func (t *Tunnel) onTunnelMsg(message []byte) error {
-	cmd := message[0]
+	cmd := uint8(message[0])
+	log.Debugf("onTunnelMsg messag len %d, cmd %d", len(message), cmd)
+	if t.isRequestCmd(cmd) {
+		return t.onTunnelRequestMessage(cmd, message)
+	}
+
+	switch cmd {
+	case cMDPing:
+		log.Debugf("onPing")
+		return t.sendPong(message)
+	case cMDPong:
+		log.Debugf("onPong")
+		return t.onPong(message)
+
+	default:
+		log.Errorf("[Tunnel]unknown cmd:", cmd)
+	}
+	return nil
+}
+
+func (t *Tunnel) isRequestCmd(cmd uint8) bool {
+	if cmd >= cMReqBegin && cmd < cMDReqEnd {
+		return true
+	}
+
+	return false
+}
+
+func (t *Tunnel) onPong(message []byte) error {
+	if len(message) != 9 {
+		return fmt.Errorf("message len != 9")
+	}
+	return nil
+}
+
+func (t *Tunnel) onTunnelRequestMessage(cmd uint8, message []byte) error {
+
 	idx := binary.LittleEndian.Uint16(message[1:])
 	tag := binary.LittleEndian.Uint16(message[3:])
 
@@ -130,7 +205,6 @@ func (t *Tunnel) onTunnelMsg(message []byte) error {
 
 func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
 	//log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
-
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
 		return fmt.Errorf("can not find request, idx %d, tag %d", idx, tag)
@@ -186,7 +260,10 @@ func (t *Tunnel) serveConn(conn net.Conn, idx uint16, tag uint16) error {
 		n, err := conn.Read(buf)
 		if err != nil {
 			// log.Println("proxy read failed:", err)
-			return t.onClientRecvClose(idx, tag)
+			if !isNetErrUseOfCloseNetworkConnection(err) {
+				return t.onClientRecvClose(idx, tag)
+			}
+			return nil
 		}
 
 		if n == 0 {
@@ -277,6 +354,10 @@ func (t *Tunnel) sendCtl2Server(cmd uint8, idx, tag uint16) error {
 func (t *Tunnel) write(data []byte) error {
 	t.writeLock.Lock()
 	defer t.writeLock.Unlock()
+
+	if t.conn == nil {
+		return fmt.Errorf("t.conn == nil ")
+	}
 	return t.conn.WriteMessage(websocket.BinaryMessage, data)
 }
 
