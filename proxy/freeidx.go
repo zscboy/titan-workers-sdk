@@ -19,6 +19,9 @@ func (f *FreeIdx) push(value uint16) {
 }
 
 func (f *FreeIdx) pop() uint16 {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+
 	if len(f.freeIdx) < 1 {
 		panic("FreeIdx is empty")
 	}

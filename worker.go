@@ -9,6 +9,16 @@ import (
 	"time"
 )
 
+type Area struct {
+	AreaID  string         `json:"area_id"`
+	Regions map[string]int `json:"region"`
+}
+
+// list":[{"area_id":"Asia-China-Guangdong-Shenzhen","region":["china","hongkong"]}]
+type AreaList struct {
+	List []*Area
+}
+
 type AccessPoint struct {
 	L2NodeID string `json:"NodeID"`
 	URL      string `json:"WsURL"`
@@ -29,12 +39,17 @@ type ProjectBase struct {
 
 type Project struct {
 	ID     string `json:"project_id"`
-	Status int    `json:"status"`
+	Status string `json:"status"`
+	AreaID string `json:"area_id"`
+	Region string `json:"region"`
 	ProjectBase
 }
 
 type ReqCreateProject struct {
 	ProjectBase
+	Region  string `json:"region"`
+	NodeIDs string `json:"node_ids"`
+	AreaID  string `json:"area_id"`
 }
 
 type ReqUpdatePorjct struct {
@@ -61,6 +76,9 @@ type Worker interface {
 	GetProjects() ([]*Project, error)
 	DeleteProject(projectID string) error
 	GetProjectInfo(projectID string) (*PorjectInfo, error)
+	// area is asia,americas,europe,africa,oceania
+	GetRegions(area string) (*AreaList, error)
+	ListNodesWithRegions(areaID string, region string) ([]string, error)
 }
 
 func NewWorker(cfg *Config) (Worker, error) {
@@ -123,6 +141,10 @@ func (w *worker) UpldateProject(reqUpdateProject *ReqUpdatePorjct) error {
 		return err
 	}
 
+	if ret.Code != 0 {
+		return fmt.Errorf(string(body))
+	}
+
 	return nil
 }
 
@@ -166,6 +188,10 @@ func (w *worker) CreateProject(reqCreateProject *ReqCreateProject) error {
 		return err
 	}
 
+	if ret.Code != 0 {
+		return fmt.Errorf(string(body))
+	}
+
 	return nil
 }
 
@@ -207,6 +233,8 @@ func (w *worker) GetProjects() ([]*Project, error) {
 	if ret.Code != 0 {
 		return nil, fmt.Errorf(ret.Message)
 	}
+
+	// fmt.Println("GetProjects ", string(body))
 
 	dataList := struct {
 		List interface{} `json:"list"`
@@ -309,6 +337,102 @@ func (w *worker) GetProjectInfo(projectID string) (*PorjectInfo, error) {
 	}
 
 	return &pinfo, nil
+}
+
+func (w *worker) GetRegions(area string) (*AreaList, error) {
+	url := fmt.Sprintf("%s/api/v1/project/regions?region=%s", w.config.APIServer, area)
+	// Create a new HTTP GET request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add custom headers if needed
+	addHeaderToRequest(req, w.token)
+
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("status code %d, %s", resp.StatusCode, string(buf))
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := Result{}
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(ret.Message)
+	}
+
+	// fmt.Println("area list ", string(body))
+	areaList := &AreaList{}
+	if err := interfaceToStruct(ret.Data, &areaList); err != nil {
+		return nil, err
+	}
+
+	return areaList, nil
+}
+
+func (w *worker) ListNodesWithRegions(areaID string, region string) ([]string, error) {
+	url := fmt.Sprintf("%s/api/v1/project/region/nodes?area_id=%s&region=%s", w.config.APIServer, areaID, region)
+	// Create a new HTTP GET request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add custom headers if needed
+	addHeaderToRequest(req, w.token)
+
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("status code %d, %s", resp.StatusCode, string(buf))
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := Result{}
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(ret.Message)
+	}
+
+	// fmt.Println("node list ", string(body))
+	// areaList := &AreaList{}
+	// if err := interfaceToStruct(ret.Data, &areaList); err != nil {
+	// 	return nil, err
+	// }
+
+	return nil, nil
 }
 
 func (w *worker) login() error {

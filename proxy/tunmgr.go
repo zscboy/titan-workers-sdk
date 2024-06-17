@@ -16,6 +16,11 @@ const (
 	sortIntervel      = 3 * time.Second
 )
 
+type Selector interface {
+	GetServerURL() (string, error)
+	ReconnectCount()
+}
+
 type DestAddr struct {
 	Addr string
 	Port int
@@ -33,12 +38,12 @@ type TunMgr struct {
 
 	reconnectsLock sync.Mutex
 
-	accessPoint AccessPoint
+	selector Selector
 }
 
-func NewTunManager(uuid string, tunnelCount, tunnelCap int, ap AccessPoint) *TunMgr {
-	if ap == nil {
-		panic("access point can not empty")
+func NewTunManager(uuid string, tunnelCount, tunnelCap int, s Selector) *TunMgr {
+	if s == nil {
+		panic("selector can not empty")
 	}
 
 	return &TunMgr{
@@ -47,7 +52,7 @@ func NewTunManager(uuid string, tunnelCount, tunnelCap int, ap AccessPoint) *Tun
 		tunnelCap:      tunnelCap,
 		reconnects:     make([]int, 0),
 		reconnectsLock: sync.Mutex{},
-		accessPoint:    ap,
+		selector:       s,
 	}
 }
 
@@ -59,12 +64,6 @@ func (tm *TunMgr) Startup() {
 		tunnel := newTunnel(tm.uuid, i, tm, tm.tunnelCap)
 		tm.tunnels = append(tm.tunnels, tunnel)
 		tm.sortedTunnels = append(tm.sortedTunnels, tunnel)
-
-		go func() {
-			if err := tunnel.connect(); err != nil {
-				log.Errorf("connect %s", err.Error())
-			}
-		}()
 	}
 
 	go tm.keepAlive()
@@ -218,11 +217,10 @@ func (tm *TunMgr) keepAlive() {
 				continue
 			}
 
-			go func() {
-				if err := tun.connect(); err != nil {
-					log.Errorf("reconnect failed %s", err.Error())
-				}
-			}()
+			// tm.reconnectCount()
+			if err := tun.reconnect(); err != nil {
+				log.Errorf("reconnect failed %s", err.Error())
+			}
 		}
 	}
 }
@@ -234,5 +232,9 @@ func (tm *TunMgr) onTunnelBroken(tun *Tunnel) {
 }
 
 func (tm *TunMgr) getServerURL() (string, error) {
-	return tm.accessPoint.GetServerURL()
+	return tm.selector.GetServerURL()
+}
+
+func (tm *TunMgr) reconnectCount() {
+	tm.selector.ReconnectCount()
 }

@@ -1,0 +1,25 @@
+[server]
+user_name = "admin"
+password = "admin"
+#url = "http://120.79.221.36:10093"
+url = "https://api-workerd.container1.titannet.io"
+
+## region = [aisa-japan,us-california,asia-korea-Seoul,europe-germany,asia-singapore]
+[[projects]]
+region = "asia-singapore"
+#[[projects]]
+#id = "73f3a261-7a29-4845-90c7-09101d1efb7e"
+
+[socks5]
+listenAddress = "127.0.0.1:1080"
+
+[http]
+listenAddress = "127.0.0.1:1081"
+
+[tun]
+count = 4
+cap = 100
+
+[Log]
+# debug or info
+level = "debug"

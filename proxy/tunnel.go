@@ -66,7 +66,7 @@ type Tunnel struct {
 }
 
 func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
-	return &Tunnel{
+	tun := &Tunnel{
 		uuid:      uuid,
 		idx:       idx,
 		tunmgr:    tunmgr,
@@ -74,11 +74,17 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
 		writeLock: sync.Mutex{},
 		reqq:      newReqq(cap),
 	}
+
+	if err := tun.connect(); err != nil {
+		tun.tunmgr.onTunnelBroken(tun)
+	} else {
+		go tun.serveWebsocket()
+	}
+
+	return tun
 }
 
 func (t *Tunnel) connect() error {
-	defer t.onWebsocketClose()
-
 	url, err := t.tunmgr.getServerURL()
 	if err != nil {
 		return err
@@ -93,19 +99,19 @@ func (t *Tunnel) connect() error {
 		}
 		return fmt.Errorf("dial %s failed %s", url, err.Error())
 	}
-	defer conn.Close()
-
 	t.conn = conn
 
 	log.Infof("new tun %s", url)
+	return nil
+}
 
-	// conn.SetPongHandler(tc.onPone)
-	// go tc.keepalive()
-
+func (t *Tunnel) serveWebsocket() error {
+	defer t.onWebsocketClose()
+	conn := t.conn
 	for {
 		messageType, p, err := conn.ReadMessage()
 		if err != nil {
-			log.Info("Error reading message:", err)
+			log.Errorf("Error reading message:", err)
 			return err
 		}
 
@@ -118,6 +124,24 @@ func (t *Tunnel) connect() error {
 			log.Errorf("onTunnelMsg: %s", err.Error())
 		}
 	}
+}
+
+func (t *Tunnel) onWebsocketClose() {
+	if t.conn != nil {
+		t.conn.Close()
+		t.conn = nil
+	}
+	t.tunmgr.onTunnelBroken(t)
+}
+
+func (t *Tunnel) reconnect() error {
+	if err := t.connect(); err != nil {
+		t.tunmgr.onTunnelBroken(t)
+		return err
+	}
+
+	go t.serveWebsocket()
+	return nil
 }
 
 func (t *Tunnel) sendPing() error {
@@ -135,31 +159,23 @@ func (t *Tunnel) sendPong(data []byte) error {
 	return t.write(buf)
 }
 
-func (t *Tunnel) onWebsocketClose() {
-	if t.conn != nil {
-		t.conn = nil
-	}
-	t.tunmgr.onTunnelBroken(t)
-
-}
-
 func (t *Tunnel) resetBusy() {
 	t.busy = 0
 }
 
 func (t *Tunnel) onTunnelMsg(message []byte) error {
 	cmd := uint8(message[0])
-	log.Debugf("onTunnelMsg messag len %d, cmd %d", len(message), cmd)
+	// log.Debugf("onTunnelMsg messag len %d, cmd %d", len(message), cmd)
 	if t.isRequestCmd(cmd) {
 		return t.onTunnelRequestMessage(cmd, message)
 	}
 
 	switch cmd {
 	case cMDPing:
-		log.Debugf("onPing")
+		// log.Debugf("onPing")
 		return t.sendPong(message)
 	case cMDPong:
-		log.Debugf("onPong")
+		// log.Debugf("onPong")
 		return t.onPong(message)
 
 	default:
@@ -207,32 +223,35 @@ func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
 	//log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
-		return fmt.Errorf("can not find request, idx %d, tag %d", idx, tag)
+		return fmt.Errorf("onServerRequestData can not find request, idx %d, tag %d", idx, tag)
 	}
 	return req.write(data)
 }
 
 func (t *Tunnel) onServerRecvFinish(idx, tag uint16) error {
-	log.Debugf("onServerRequestFinish, idx:%d tag:%d", idx, tag)
+	log.Debugf("onServerRecvFinish, idx:%d tag:%d", idx, tag)
 
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
-		return fmt.Errorf("can not find request, idx %d, tag %d", idx, tag)
+		return fmt.Errorf("onServerRecvFinish can not find request, idx %d, tag %d", idx, tag)
 	}
 	return req.onServerFinished()
 }
 
 func (t *Tunnel) onServerRecvClose(idx, tag uint16) {
-	log.Debugf("onServerRequestClose, idx:%d tag:%d", idx, tag)
+	log.Debugf("onServerRecvClose, idx:%d tag:%d", idx, tag)
 	t.reqq.free(idx, tag)
 }
 
 func (t *Tunnel) onAcceptRequest(conn net.Conn, dest *DestAddr) error {
-	log.Debugf("onAcceptRequest, dest addr %s port %d", dest.Addr, dest.Port)
+	log.Debugf("onAcceptRequest, dest %s:%d", dest.Addr, dest.Port)
+
 	req, err := t.acceptRequestInternal(conn, dest)
 	if err != nil {
 		return err
 	}
+
+	log.Debugf("onAcceptRequest, alloc idx %d tag %d", req.idx, req.tag)
 	return t.serveConn(conn, req.idx, req.tag)
 }
 
@@ -259,7 +278,11 @@ func (t *Tunnel) serveConn(conn net.Conn, idx uint16, tag uint16) error {
 	for {
 		n, err := conn.Read(buf)
 		if err != nil {
-			// log.Println("proxy read failed:", err)
+			// log.Debugf("serveConn: %s", err.Error())
+			// if err == io.EOF {
+			// 	return t.onClientRecvFinished(idx, tag)
+			// }
+
 			if !isNetErrUseOfCloseNetworkConnection(err) {
 				return t.onClientRecvClose(idx, tag)
 			}
@@ -268,7 +291,8 @@ func (t *Tunnel) serveConn(conn net.Conn, idx uint16, tag uint16) error {
 
 		if n == 0 {
 			// log.Println("proxy read, server half close")
-			return t.onClientRecvFinished(idx, tag)
+			t.onClientRecvFinished(idx, tag)
+			continue
 		}
 
 		t.onClientRecvData(idx, tag, buf[:n])
@@ -296,7 +320,7 @@ func (t *Tunnel) onClientRecvFinished(idx, tag uint16) error {
 }
 
 func (t *Tunnel) onClientRecvData(idx, tag uint16, data []byte) error {
-	log.Infof("onClientRecvData, idx %d tag %d", idx, tag)
+	// log.Debugf("onClientRecvData, idx %d tag %d", idx, tag)
 	if !t.reqq.reqValid(idx, tag) {
 		return fmt.Errorf("onClientRecvData, invalid idx %d tag %d", idx, tag)
 	}
@@ -340,7 +364,7 @@ func (t *Tunnel) sendCreate2Server(req *Request, destAddr *DestAddr) error {
 		return t.write(buf)
 	}
 
-	return fmt.Errorf("[Tunnel] accept sock failed, tunnel is disconnected")
+	return fmt.Errorf("[Tunnel] sendCreate2Server failed, tunnel is disconnected")
 }
 
 func (t *Tunnel) sendCtl2Server(cmd uint8, idx, tag uint16) error {
