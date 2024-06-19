@@ -49,6 +49,10 @@ func newCustomSelector(config *config.Config) (proxy.Selector, error) {
 		return nil, err
 	}
 
+	if len(urls) == 0 {
+		return nil, fmt.Errorf("can not find access points")
+	}
+
 	log.Infof("get access point %d", len(urls))
 	return &customSelector{worker: w, urls: urls, nextIdx: 0, reconnectCount: 0, config: config}, nil
 }
@@ -56,6 +60,10 @@ func newCustomSelector(config *config.Config) (proxy.Selector, error) {
 func (selector *customSelector) GetServerURL() (string, error) {
 	if selector.reconnectCount > maxReconnectCount {
 		selector.reloadAccessPoints()
+	}
+
+	if len(selector.urls) == 0 {
+		return "", fmt.Errorf("can not find access points")
 	}
 
 	idx := selector.nextIdx % len(selector.urls)

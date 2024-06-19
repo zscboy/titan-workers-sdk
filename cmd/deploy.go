@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"time"
 
 	"github.com/spf13/cobra"
 	worker "github.com/zscboy/titan-workers-sdk"
@@ -40,6 +41,16 @@ func deploy(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
+	expiration, err := cmd.Flags().GetString("expiration")
+	if err != nil {
+		return err
+	}
+
+	if len(expiration) == 0 {
+		expireTime := time.Now().Add(100 * 24 * time.Hour)
+		expiration = expireTime.Format("2006-01-02 15:04:05")
+	}
+
 	if len(args) == 0 {
 		return fmt.Errorf("Please specify the name of the config file")
 	}
@@ -64,7 +75,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 	}
 
 	base := worker.ProjectBase{Name: name, BundleURL: bundleURL, Replicas: replicas}
-	req := &worker.ReqCreateProject{Region: region, ProjectBase: base, NodeIDs: nodes, AreaID: areaID}
+	req := &worker.ReqCreateProject{Region: region, ProjectBase: base, NodeIDs: nodes, AreaID: areaID, Expiration: expiration}
 	return w.CreateProject(req)
 
 }

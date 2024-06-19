@@ -47,9 +47,10 @@ type Project struct {
 
 type ReqCreateProject struct {
 	ProjectBase
-	Region  string `json:"region"`
-	NodeIDs string `json:"node_ids"`
-	AreaID  string `json:"area_id"`
+	Region     string `json:"region"`
+	NodeIDs    string `json:"node_ids"`
+	AreaID     string `json:"area_id"`
+	Expiration string `json:"expiration"`
 }
 
 type ReqUpdatePorjct struct {

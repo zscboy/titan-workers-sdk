@@ -152,6 +152,7 @@ func execute() {
 	deployCmd.Flags().String("bundle-url", "", "Specifying the bundle url")
 	deployCmd.Flags().String("nodes", "", "Specifying the nodes to deploy project")
 	deployCmd.Flags().Int("replicas", 100, "Specifying the replicas")
+	deployCmd.Flags().String("expiration", "", "Specifying the expiration")
 
 	projectInfoCmd.Flags().String("project-id", "", "Specifying the project id")
 	deleteProjectCmd.Flags().String("project-id", "", "Specifying the project id")
