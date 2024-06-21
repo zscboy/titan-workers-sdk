@@ -1,6 +1,6 @@
 [server]
-user_name = "admin"
-password = "admin"
+user_name = "test"
+password = "test"
 #url = "http://120.79.221.36:10093"
 url = "https://api-workerd.container1.titannet.io"
 
