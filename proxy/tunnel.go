@@ -85,11 +85,7 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
 }
 
 func (t *Tunnel) connect() error {
-	url, err := t.tunmgr.getServerURL()
-	if err != nil {
-		return err
-	}
-
+	url := t.tunmgr.url
 	url = fmt.Sprintf("%s?cap=%d&uuid=%s", url, t.cap, t.uuid)
 	conn, resp, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -102,6 +98,14 @@ func (t *Tunnel) connect() error {
 	t.conn = conn
 
 	log.Infof("new tun %s", url)
+	return nil
+}
+
+func (t *Tunnel) closeWebsocket() error {
+	if t.conn != nil {
+		return t.conn.Close()
+	}
+
 	return nil
 }
 
@@ -220,7 +224,7 @@ func (t *Tunnel) onTunnelRequestMessage(cmd uint8, message []byte) error {
 }
 
 func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
-	//log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
+	log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
 		return fmt.Errorf("onServerRequestData can not find request, idx %d, tag %d", idx, tag)

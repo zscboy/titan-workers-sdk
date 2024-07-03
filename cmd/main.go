@@ -14,32 +14,45 @@ var log = logging.Logger("sample")
 const version = "0.0.1"
 
 var listNodesCmd = &cobra.Command{
-	Use:     "list-node",
-	Short:   "list node with region",
-	Example: "list-node --area-id=xxx --region=xx /path/to/config",
+	Use:     "node",
+	Short:   "list all nodes",
+	Example: "node /path/to/config",
 	Run: func(cmd *cobra.Command, args []string) {
-		nodes, err := listNodeWithRegion(cmd, args)
+		pInfos, err := listNodes(cmd, args)
 		if err != nil {
 			fmt.Println("list projects ", err.Error())
 			return
 		}
 
-		if len(nodes) == 0 {
+		if len(pInfos) == 0 {
 			fmt.Println("no node exist")
 			return
 		}
 
-		// for _, project := range projects {
-		// 	fmt.Printf("%s %d %d %s %s %s\n", project.ID, project.Status, project.Replicas, project.Name, project.AreaID, project.Region)
-		// }
+		for _, info := range pInfos {
+			fmt.Printf("%s %s %s\n", info.Name, info.AreaID, info.ID)
+			for _, ap := range info.Nodes {
+				status := "failed"
+				if ap.Status == 1 {
+					status = "servicing"
+				}
+				fmt.Printf("%s %s %s %s\n", ap.AreaID, ap.ID, ap.IP, status)
+			}
+		}
 
 	},
 }
 
+var listCmd = &cobra.Command{
+	Use:     "list",
+	Short:   "list projects or nodes",
+	Example: "list [cmd] /path/to/cofnig",
+}
+
 var listProjectsCmd = &cobra.Command{
-	Use:     "list-project",
+	Use:     "project",
 	Short:   "list all projects",
-	Example: "list-project /path/to/config",
+	Example: "project /path/to/config",
 	Run: func(cmd *cobra.Command, args []string) {
 		projects, err := listProjects(cmd, args)
 		if err != nil {
@@ -54,6 +67,7 @@ var listProjectsCmd = &cobra.Command{
 
 		for _, project := range projects {
 			fmt.Printf("%s %s %d %s %s %s\n", project.ID, project.Status, project.Replicas, project.Name, project.AreaID, project.Region)
+
 		}
 
 	},
@@ -71,8 +85,8 @@ var projectInfoCmd = &cobra.Command{
 		}
 
 		fmt.Println("Project ID: ", projectInfo.ID)
-		for _, accessPoint := range projectInfo.AccessPoints {
-			fmt.Printf("%s %s\n", accessPoint.L2NodeID, accessPoint.URL)
+		for _, accessPoint := range projectInfo.Nodes {
+			fmt.Printf("%s %s\n", accessPoint.ID, accessPoint.URL)
 		}
 
 	},
@@ -167,11 +181,13 @@ func execute() {
 	rootCmd.AddCommand(deployCmd)
 
 	// projectCmd.AddCommand(listProjectsCmd, projectInfoCmd)
-	rootCmd.AddCommand(listProjectsCmd)
+	// rootCmd.AddCommand(listProjectsCmd)
+	listCmd.AddCommand(listProjectsCmd)
+	listCmd.AddCommand(listNodesCmd)
+
+	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(projectInfoCmd)
 	rootCmd.AddCommand(deleteProjectCmd)
-
-	rootCmd.AddCommand(listNodesCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Error(err)

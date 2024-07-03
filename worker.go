@@ -19,16 +19,21 @@ type AreaList struct {
 	List []*Area
 }
 
-type AccessPoint struct {
-	L2NodeID string `json:"NodeID"`
-	URL      string `json:"WsURL"`
+type Node struct {
+	ID     string `json:"NodeID"`
+	URL    string `json:"WsURL"`
+	Status int    `json:"status"`
+	AreaID string `json:"AreaID"`
+	IP     string `json:"IP"`
 }
 
 type PorjectInfo struct {
-	ID           string         `json:"UUID"`
-	Name         string         `json:"Name"`
-	BundleURL    string         `json:"BundleURL"`
-	AccessPoints []*AccessPoint `json:"DetailsList"`
+	ID        string  `json:"UUID"`
+	Name      string  `json:"Name"`
+	BundleURL string  `json:"BundleURL"`
+	AreaID    string  `json:"AreaID"`
+	Replicas  int     `json:"Replicas"`
+	Nodes     []*Node `json:"DetailsList"`
 }
 
 type ProjectBase struct {
@@ -321,6 +326,8 @@ func (w *worker) GetProjectInfo(projectID string) (*PorjectInfo, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	// fmt.Println("GetProjectInfo ", string(body))
 
 	ret := Result{}
 	err = json.Unmarshal(body, &ret)

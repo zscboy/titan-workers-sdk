@@ -16,10 +16,11 @@ const (
 	sortIntervel      = 3 * time.Second
 )
 
-type Selector interface {
-	GetServerURL() (string, error)
-	ReconnectCount()
-}
+// type Selector interface {
+// 	GetServerURL() (string, error)
+// 	FindNode(nodeID string) (string, error)
+// 	// ReconnectCount()
+// }
 
 type DestAddr struct {
 	Addr string
@@ -38,12 +39,13 @@ type TunMgr struct {
 
 	reconnectsLock sync.Mutex
 
-	selector Selector
+	// selector Selector
+	url string
 }
 
-func NewTunManager(uuid string, tunnelCount, tunnelCap int, s Selector) *TunMgr {
-	if s == nil {
-		panic("selector can not empty")
+func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string) *TunMgr {
+	if len(url) == 0 {
+		panic("url can not empty")
 	}
 
 	return &TunMgr{
@@ -52,7 +54,7 @@ func NewTunManager(uuid string, tunnelCount, tunnelCap int, s Selector) *TunMgr 
 		tunnelCap:      tunnelCap,
 		reconnects:     make([]int, 0),
 		reconnectsLock: sync.Mutex{},
-		selector:       s,
+		url:            url,
 	}
 }
 
@@ -69,6 +71,29 @@ func (tm *TunMgr) Startup() {
 	go tm.keepAlive()
 
 	go tm.doSortTunnels()
+}
+
+func (tm *TunMgr) ResetTunnel(url string) {
+	tm.url = url
+
+	length := len(tm.tunnels)
+	for i := 0; i < length; i++ {
+		tun := tm.tunnels[i]
+		if !tun.isConnected() {
+			continue
+		}
+		tun.closeWebsocket()
+	}
+
+	tm.reconnects = make([]int, 0)
+	tm.tunnels = make([]*Tunnel, 0, tm.tunnelCount)
+	tm.sortedTunnels = make([]*Tunnel, 0, tm.tunnelCount)
+
+	for i := 0; i < tm.tunnelCount; i++ {
+		tunnel := newTunnel(tm.uuid, i, tm, tm.tunnelCap)
+		tm.tunnels = append(tm.tunnels, tunnel)
+		tm.sortedTunnels = append(tm.sortedTunnels, tunnel)
+	}
 }
 
 func (tm *TunMgr) OnAcceptRequest(conn net.Conn, dest *DestAddr) {
@@ -231,10 +256,10 @@ func (tm *TunMgr) onTunnelBroken(tun *Tunnel) {
 	tm.reconnects = append(tm.reconnects, tun.idx)
 }
 
-func (tm *TunMgr) getServerURL() (string, error) {
-	return tm.selector.GetServerURL()
-}
+// func (tm *TunMgr) getServerURL() (string, error) {
+// 	return tm.selector.GetServerURL()
+// }
 
-func (tm *TunMgr) reconnectCount() {
-	tm.selector.ReconnectCount()
-}
+// func (tm *TunMgr) reconnectCount() {
+// 	tm.selector.ReconnectCount()
+// }

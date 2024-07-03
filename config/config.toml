@@ -1,12 +1,13 @@
 [server]
-user_name = "test"
-password = "test"
+user_name = "workerd002"
+password = "xUBqPj0RV2QT"
 #url = "http://120.79.221.36:10093"
-url = "https://api-workerd.container1.titannet.io"
+#url = "https://api-workerd-prod.container1.titannet.io"
+url = "https://api-workerd.titannet.io"
 
 ## region = [aisa-japan,us-california,asia-korea-Seoul,europe-germany,asia-singapore]
-[[projects]]
-region = "asia-singapore"
+#[[projects]]
+#region = "asia-singapore"
 #[[projects]]
 #id = "73f3a261-7a29-4845-90c7-09101d1efb7e"
 
@@ -15,6 +16,10 @@ listenAddress = "127.0.0.1:1080"
 
 [http]
 listenAddress = "127.0.0.1:1081"
+
+# Receive execution commands
+[local_http_server]
+listenAddress = "127.0.0.1:1082"
 
 [tun]
 count = 4

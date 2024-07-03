@@ -5,7 +5,6 @@ import (
 
 	worker "github.com/zscboy/titan-workers-sdk"
 	"github.com/zscboy/titan-workers-sdk/config"
-	"github.com/zscboy/titan-workers-sdk/proxy"
 )
 
 const maxReconnectCount = 10
@@ -14,7 +13,7 @@ type sampleSelector struct {
 	ServerURL string
 }
 
-func newSampleSelector(serverURL string) (proxy.Selector, error) {
+func newSampleSelector(serverURL string) (*sampleSelector, error) {
 	return &sampleSelector{ServerURL: serverURL}, nil
 }
 
@@ -25,108 +24,148 @@ func (selector *sampleSelector) GetServerURL() (string, error) {
 	return selector.ServerURL, nil
 }
 
-func (selector *sampleSelector) ReconnectCount() {
-
+func (selector *sampleSelector) FindNode(nodeID string) (string, error) {
+	return "", fmt.Errorf("not implement")
 }
+
+// func (selector *sampleSelector) ReconnectCount() {
+
+// }
 
 type customSelector struct {
-	worker         worker.Worker
-	urls           []string
-	nextIdx        int
-	reconnectCount int
-	config         *config.Config
+	worker             worker.Worker
+	pInfos             []*worker.PorjectInfo
+	config             *config.Config
+	currentAccessPoint *worker.Node
 }
 
-func newCustomSelector(config *config.Config) (proxy.Selector, error) {
+func newCustomSelector(config *config.Config) (*customSelector, error) {
 	wConfig := &worker.Config{UserName: config.Server.UserName, Password: config.Server.Password, APIServer: config.Server.URL}
 	w, err := worker.NewWorker(wConfig)
 	if err != nil {
 		return nil, err
 	}
 
-	urls, err := loadAccessPoints(w, config)
+	pInfos, err := loadProjects(w)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(urls) == 0 {
+	if len(pInfos) == 0 {
 		return nil, fmt.Errorf("can not find access points")
 	}
 
-	log.Infof("get access point %d", len(urls))
-	return &customSelector{worker: w, urls: urls, nextIdx: 0, reconnectCount: 0, config: config}, nil
+	return &customSelector{worker: w, pInfos: pInfos, config: config}, nil
 }
 
 func (selector *customSelector) GetServerURL() (string, error) {
-	if selector.reconnectCount > maxReconnectCount {
-		selector.reloadAccessPoints()
+	if len(selector.pInfos) == 0 {
+		return "", fmt.Errorf("can not find any project exist")
 	}
 
-	if len(selector.urls) == 0 {
-		return "", fmt.Errorf("can not find access points")
+	pInfo := selector.pInfos[0]
+	if len(pInfo.Nodes) == 0 {
+		return "", fmt.Errorf("can not find any node exist")
 	}
 
-	idx := selector.nextIdx % len(selector.urls)
-	url := selector.urls[idx]
+	ap := pInfo.Nodes[0]
+	selector.currentAccessPoint = ap
 
-	selector.nextIdx = idx + 1
-	if selector.nextIdx == len(selector.urls) {
-		selector.nextIdx = 0
-	}
+	url := fmt.Sprintf("%s/project/%s/%s/tun", ap.URL, ap.ID, pInfo.ID)
+
 	return url, nil
 }
 
-func (selector *customSelector) ReconnectCount() {
-	selector.reconnectCount++
+func (selector *customSelector) FindNode(nodeID string) (string, error) {
+	for _, pInfo := range selector.pInfos {
+		for _, ap := range pInfo.Nodes {
+			if ap.ID == nodeID {
+				selector.currentAccessPoint = ap
+				return fmt.Sprintf("%s/project/%s/%s/tun", ap.URL, ap.ID, pInfo.ID), nil
+			}
+		}
+	}
+
+	return "", fmt.Errorf("can not find node %s", nodeID)
 }
 
 func (selector *customSelector) reloadAccessPoints() error {
 	log.Debugf("reloadAccessPoints")
-	urls, err := loadAccessPoints(selector.worker, selector.config)
+	pInfos, err := loadProjects(selector.worker)
 	if err != nil {
 		return err
 	}
-	selector.urls = urls
-
-	selector.reconnectCount = 0
-	selector.nextIdx = 0
+	selector.pInfos = pInfos
 
 	return nil
 }
 
-func loadAccessPoints(w worker.Worker, config *config.Config) ([]string, error) {
-	regionMap := make(map[string]struct{})
-	for _, project := range config.Projects {
-		regionMap[project.Region] = struct{}{}
+func (selector *customSelector) Count() int {
+	count := 0
+	for _, info := range selector.pInfos {
+		count = count + len(info.Nodes)
 	}
+	return count
+}
 
+func (selector *customSelector) ProjectInfos() []*worker.PorjectInfo {
+	return selector.pInfos
+}
+
+func (selector *customSelector) CurrentNode() *worker.Node {
+	return selector.currentAccessPoint
+}
+
+func loadProjects(w worker.Worker) ([]*worker.PorjectInfo, error) {
 	projects, err := w.GetProjects()
 	if err != nil {
 		return nil, err
 	}
 
-	projectInfos := make([]*worker.PorjectInfo, 0, len(config.Projects))
+	projectInfos := make([]*worker.PorjectInfo, 0)
 	for _, project := range projects {
-		if _, ok := regionMap[project.Region]; ok {
-			projectInfo, err := w.GetProjectInfo(project.ID)
-			if err != nil {
-				log.Errorf("GetProjectInfo %s %s", project.AreaID, err.Error())
+		projectInfo, err := w.GetProjectInfo(project.ID)
+		if err != nil {
+			log.Errorf("GetProjectInfo %s %s", project.AreaID, err.Error())
+			continue
+		}
+		projectInfos = append(projectInfos, projectInfo)
+	}
+
+	count := 0
+	serviceStatus := 1
+	pInfos := make([]*worker.PorjectInfo, 0)
+
+	for _, projectInfo := range projectInfos {
+		accessPoints := make([]*worker.Node, 0)
+		for _, ap := range projectInfo.Nodes {
+			if ap.Status != serviceStatus {
 				continue
 			}
-			projectInfos = append(projectInfos, projectInfo)
-		}
-	}
 
-	urls := make([]string, 0)
-	for _, projectInfo := range projectInfos {
-		for _, ap := range projectInfo.AccessPoints {
-			if len(ap.URL) != 0 {
-				url := fmt.Sprintf("%s/project/%s/%s/tun", ap.URL, ap.L2NodeID, projectInfo.ID)
-				urls = append(urls, url)
+			if len(ap.URL) == 0 {
+				continue
 			}
+
+			accessPoints = append(accessPoints, ap)
+			count++
 		}
+
+		if len(accessPoints) == 0 {
+			continue
+		}
+
+		info := &worker.PorjectInfo{
+			ID:        projectInfo.ID,
+			Name:      projectInfo.Name,
+			BundleURL: projectInfo.BundleURL,
+			AreaID:    projectInfo.AreaID,
+			Replicas:  projectInfo.Replicas,
+			Nodes:     accessPoints,
+		}
+		pInfos = append(pInfos, info)
 
 	}
 
-	return urls, nil
+	return pInfos, nil
 }

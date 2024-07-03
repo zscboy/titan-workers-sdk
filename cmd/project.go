@@ -31,6 +31,7 @@ func listProjects(cmd *cobra.Command, args []string) ([]*worker.Project, error) 
 	}
 
 	return w.GetProjects()
+
 }
 
 func getProjectInfo(cmd *cobra.Command, args []string) (*worker.PorjectInfo, error) {

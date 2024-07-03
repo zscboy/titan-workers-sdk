@@ -6,12 +6,13 @@ import (
 
 // Config represents the structure of the TOML file
 type Config struct {
-	Server   Server    `toml:"server"`
-	Projects []Project `toml:"projects"`
-	Socks5   Socks5    `toml:"socks5"`
-	Http     Http      `toml:"http"`
-	Tun      Tun       `toml:"tun"`
-	Log      Log       `toml:""`
+	Server          Server          `toml:"server"`
+	Projects        []Project       `toml:"projects"`
+	Socks5          Socks5          `toml:"socks5"`
+	Http            Http            `toml:"http"`
+	LocalHttpServer LocalHttpServer `toml:"local_http_server"`
+	Tun             Tun             `toml:"tun"`
+	Log             Log             `toml:""`
 }
 
 type Server struct {
@@ -30,6 +31,10 @@ type Socks5 struct {
 }
 
 type Http struct {
+	ListenAddress string `toml:"listenAddress"`
+}
+
+type LocalHttpServer struct {
 	ListenAddress string `toml:"listenAddress"`
 }
 
