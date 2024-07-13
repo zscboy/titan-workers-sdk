@@ -1,15 +1,12 @@
 [server]
-user_name = "workerd002"
-password = "xUBqPj0RV2QT"
-#url = "http://120.79.221.36:10093"
+user_name = "admin"
+password = "admin"
+url = "http://120.79.221.36:10093"
 #url = "https://api-workerd-prod.container1.titannet.io"
-url = "https://api-workerd.titannet.io"
+#url = "https://api-workerd.titannet.io"
 
-## region = [aisa-japan,us-california,asia-korea-Seoul,europe-germany,asia-singapore]
-#[[projects]]
-#region = "asia-singapore"
-#[[projects]]
-#id = "73f3a261-7a29-4845-90c7-09101d1efb7e"
+[node]
+id = "e_85a7e089-0ce4-4337-94ca-763587a07f45"
 
 [socks5]
 listenAddress = "127.0.0.1:1080"
@@ -22,7 +19,7 @@ listenAddress = "127.0.0.1:1081"
 listenAddress = "127.0.0.1:1082"
 
 [tun]
-count = 4
+count = 1
 cap = 100
 
 [Log]

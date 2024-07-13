@@ -1,12 +1,15 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	worker "github.com/zscboy/titan-workers-sdk"
 	"github.com/zscboy/titan-workers-sdk/config"
+	"github.com/zscboy/titan-workers-sdk/tablewriter"
 )
 
 func getRegions(cmd *cobra.Command, args []string) (*worker.AreaList, error) {
@@ -70,4 +73,43 @@ func listNodeWithRegion(cmd *cobra.Command, args []string) ([]string, error) {
 	}
 
 	return w.ListNodesWithRegions(areaID, region)
+}
+
+var listRegionsCmd = &cobra.Command{
+	Use:     "region",
+	Short:   "list regions",
+	Example: "region --area=asia /path/to/config",
+	Run: func(cmd *cobra.Command, args []string) {
+		areaList, err := getRegions(cmd, args)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+
+		tw := tablewriter.New(
+			tablewriter.Col("Index"),
+			tablewriter.Col("AreaID"),
+			tablewriter.Col("Regions"),
+		)
+
+		total := 0
+		for i, area := range areaList.List {
+			regions, err := json.Marshal(area.Regions)
+			if err != nil {
+				fmt.Println(err)
+				continue
+			}
+
+			m := map[string]interface{}{
+				"Index":   i,
+				"AreaID":  area.AreaID,
+				"Regions": string(regions),
+			}
+			tw.Write(m)
+			total++
+		}
+
+		tw.Flush(os.Stdout)
+		fmt.Printf(color.YellowString("\nTotal: %d ", total))
+	},
 }

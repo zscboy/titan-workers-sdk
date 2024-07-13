@@ -7,7 +7,7 @@ import (
 // Config represents the structure of the TOML file
 type Config struct {
 	Server          Server          `toml:"server"`
-	Projects        []Project       `toml:"projects"`
+	Node            Node            `toml:"node"`
 	Socks5          Socks5          `toml:"socks5"`
 	Http            Http            `toml:"http"`
 	LocalHttpServer LocalHttpServer `toml:"local_http_server"`
@@ -21,9 +21,9 @@ type Server struct {
 	URL      string `toml:"url"`
 }
 
-type Project struct {
-	// ID string `toml:"id"`
-	Region string `toml:"region"`
+type Node struct {
+	ID string `toml:"id"`
+	// Region string `toml:"region"`
 }
 
 type Socks5 struct {

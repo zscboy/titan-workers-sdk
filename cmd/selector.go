@@ -17,7 +17,7 @@ func newSampleSelector(serverURL string) (*sampleSelector, error) {
 	return &sampleSelector{ServerURL: serverURL}, nil
 }
 
-func (selector *sampleSelector) GetServerURL() (string, error) {
+func (selector *sampleSelector) GetNodeURL() (string, error) {
 	if len(selector.ServerURL) == 0 {
 		panic("no access point exist")
 	}
@@ -33,10 +33,10 @@ func (selector *sampleSelector) FindNode(nodeID string) (string, error) {
 // }
 
 type customSelector struct {
-	worker             worker.Worker
-	pInfos             []*worker.PorjectInfo
-	config             *config.Config
-	currentAccessPoint *worker.Node
+	worker         worker.Worker
+	pInfos         []*worker.PorjectInfo
+	config         *config.Config
+	currentUseNode *worker.Node
 }
 
 func newCustomSelector(config *config.Config) (*customSelector, error) {
@@ -58,30 +58,40 @@ func newCustomSelector(config *config.Config) (*customSelector, error) {
 	return &customSelector{worker: w, pInfos: pInfos, config: config}, nil
 }
 
-func (selector *customSelector) GetServerURL() (string, error) {
+func (selector *customSelector) GetNodeURL() (string, error) {
 	if len(selector.pInfos) == 0 {
 		return "", fmt.Errorf("can not find any project exist")
 	}
 
-	pInfo := selector.pInfos[0]
-	if len(pInfo.Nodes) == 0 {
-		return "", fmt.Errorf("can not find any node exist")
+	for _, pInfo := range selector.pInfos {
+		for _, node := range pInfo.Nodes {
+			if node.ID == selector.config.Node.ID {
+				selector.currentUseNode = node
+				url := fmt.Sprintf("%s/project/%s/%s/tun", node.URL, node.ID, pInfo.ID)
+				return url, nil
+			}
+		}
 	}
 
-	ap := pInfo.Nodes[0]
-	selector.currentAccessPoint = ap
+	// get first if not exist special node
+	for _, pInfo := range selector.pInfos {
+		for _, node := range pInfo.Nodes {
+			selector.currentUseNode = node
+			url := fmt.Sprintf("%s/project/%s/%s/tun", node.URL, node.ID, pInfo.ID)
+			return url, nil
+		}
+	}
 
-	url := fmt.Sprintf("%s/project/%s/%s/tun", ap.URL, ap.ID, pInfo.ID)
-
-	return url, nil
+	return "", fmt.Errorf("can not find any project exist")
 }
 
 func (selector *customSelector) FindNode(nodeID string) (string, error) {
 	for _, pInfo := range selector.pInfos {
-		for _, ap := range pInfo.Nodes {
-			if ap.ID == nodeID {
-				selector.currentAccessPoint = ap
-				return fmt.Sprintf("%s/project/%s/%s/tun", ap.URL, ap.ID, pInfo.ID), nil
+		for _, node := range pInfo.Nodes {
+			if node.ID == nodeID {
+				// copy value
+				*selector.currentUseNode = *node
+				return fmt.Sprintf("%s/project/%s/%s/tun", node.URL, node.ID, pInfo.ID), nil
 			}
 		}
 	}
@@ -113,7 +123,7 @@ func (selector *customSelector) ProjectInfos() []*worker.PorjectInfo {
 }
 
 func (selector *customSelector) CurrentNode() *worker.Node {
-	return selector.currentAccessPoint
+	return selector.currentUseNode
 }
 
 func loadProjects(w worker.Worker) ([]*worker.PorjectInfo, error) {

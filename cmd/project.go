@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	worker "github.com/zscboy/titan-workers-sdk"
 	"github.com/zscboy/titan-workers-sdk/config"
+	"github.com/zscboy/titan-workers-sdk/tablewriter"
 )
 
 func listProjects(cmd *cobra.Command, args []string) ([]*worker.Project, error) {
@@ -90,4 +92,83 @@ func deleteProjectInfo(cmd *cobra.Command, args []string) error {
 	}
 
 	return w.DeleteProject(projectID)
+}
+
+var listProjectsCmd = &cobra.Command{
+	Use:     "project",
+	Short:   "list all projects",
+	Example: "project /path/to/config",
+	Run: func(cmd *cobra.Command, args []string) {
+		projects, err := listProjects(cmd, args)
+		if err != nil {
+			fmt.Println("list projects ", err.Error())
+			return
+		}
+
+		if len(projects) == 0 {
+			fmt.Println("no project exist")
+			return
+		}
+
+		tw := tablewriter.New(
+			tablewriter.Col("ProjectID"),
+			tablewriter.Col("Name"),
+			tablewriter.Col("Status"),
+			tablewriter.Col("Replicas"),
+			tablewriter.Col("AreaID"),
+			tablewriter.Col("Region"),
+		)
+
+		for _, project := range projects {
+			m := map[string]interface{}{
+				"ProjectID": project.ID,
+				"Name":      project.Name,
+				"Status":    project.Status,
+				"Replicas":  project.Replicas,
+				"AreaID":    project.AreaID,
+				"Region":    project.Region,
+			}
+
+			tw.Write(m)
+
+		}
+
+		tw.Flush(os.Stdout)
+		fmt.Printf(color.YellowString("\nTotal: %d ", len(projects)))
+	},
+}
+
+var projectInfoCmd = &cobra.Command{
+	Use:     "project",
+	Short:   "get project info",
+	Example: "project --project-id=your-project-id /path/to/config",
+	Run: func(cmd *cobra.Command, args []string) {
+		projectInfo, err := getProjectInfo(cmd, args)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+
+		fmt.Println("Project ID: ", projectInfo.ID)
+		for _, accessPoint := range projectInfo.Nodes {
+			fmt.Printf("%s %s\n", accessPoint.ID, accessPoint.URL)
+		}
+
+	},
+}
+
+var deleteProjectCmd = &cobra.Command{
+	Use:     "delete",
+	Short:   "delete project",
+	Example: "delete --project-id=your-project-id /path/to/config",
+	Run: func(cmd *cobra.Command, args []string) {
+		err := deleteProjectInfo(cmd, args)
+		if err != nil {
+			fmt.Println(err.Error())
+			return
+		}
+
+		projectID, _ := cmd.Flags().GetString("project-id")
+		fmt.Printf("delete %s success\n", projectID)
+	},
 }

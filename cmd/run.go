@@ -12,6 +12,7 @@ import (
 	"github.com/zscboy/titan-workers-sdk/config"
 	httpproxy "github.com/zscboy/titan-workers-sdk/http"
 	"github.com/zscboy/titan-workers-sdk/proxy"
+	"github.com/zscboy/titan-workers-sdk/web"
 )
 
 func run(cmd *cobra.Command, args []string) error {
@@ -35,13 +36,13 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	logging.SetAllLoggers(logLevel)
 
-	// selector, err := newSampleSelector("ws://47.76.157.173:2345/project/e_af22c923-c262-4c37-958b-be1479815672/4457f380-105a-4757-8b26-4184d8afc30a/tun")
+	// selector, err := newSampleSelector("ws://localhost:2345/project/e_23a42fb9-0ce7-43bb-9afd-af23c576dabc/tun")
 	selector, err := newCustomSelector(cfg)
 	if err != nil {
 		return fmt.Errorf("newCustomSelector " + err.Error())
 	}
 
-	url, err := selector.GetServerURL()
+	url, err := selector.GetNodeURL()
 	if err != nil {
 		return fmt.Errorf("newCustomSelector " + err.Error())
 	}
@@ -78,6 +79,14 @@ func (local *LocalHttpServer) chnodeHandler(w http.ResponseWriter, r *http.Reque
 		w.Write([]byte("id can not empty"))
 		return
 	}
+	log.Infof("chnodeHandler id %d", nodeID)
+	if local.selector.currentUseNode != nil {
+		if local.selector.currentUseNode.ID == nodeID {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte("node is in use"))
+			return
+		}
+	}
 
 	url, err := local.selector.FindNode(nodeID)
 	if err != nil {
@@ -86,7 +95,7 @@ func (local *LocalHttpServer) chnodeHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	local.tunMgr.ResetTunnel(url)
+	local.tunMgr.RestartWith(url)
 }
 
 func (local *LocalHttpServer) lsnodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -117,13 +126,39 @@ func (local *LocalHttpServer) queryHandler(w http.ResponseWriter, r *http.Reques
 	w.Write([]byte(string(buf)))
 }
 
+func (local *LocalHttpServer) webHandler(w http.ResponseWriter, r *http.Request) {
+	node := local.selector.CurrentNode()
+	if node == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte("no node exist"))
+		return
+	}
+
+	buf, err := json.Marshal(node)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(err.Error()))
+		return
+	}
+	w.Write([]byte(string(buf)))
+}
+
 func (local *LocalHttpServer) start() {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/change", local.chnodeHandler)
 	mux.HandleFunc("/ls", local.lsnodeHandler)
-	mux.HandleFunc("/query", local.lsnodeHandler)
+	mux.HandleFunc("/query", local.queryHandler)
 
-	log.Infof("Starting local http server on %s", local.address)
+	w := web.NewWeb(local.selector.pInfos, local.selector.currentUseNode)
+	mux.HandleFunc("/web", w.WebHandler)
+	mux.HandleFunc("/web/getCountryOptions", w.GetCountryOptions)
+	mux.HandleFunc("/web/getNodeOptions", w.GetNodeOptions)
+	mux.HandleFunc("/web/submit", w.Submit)
+
+	staticServer := http.FileServer(http.FS(web.StaticFiles))
+	mux.Handle("/", staticServer)
+
+	log.Infof("Starting local web server on %s", local.address)
 	err := http.ListenAndServe(local.address, mux)
 	if err != nil {
 		log.Infof("Error starting local server:", err)

@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -63,9 +64,11 @@ type Tunnel struct {
 	reqq      *Reqq
 	writeLock sync.Mutex
 	busy      int
+	url       string
+	isDestroy bool
 }
 
-func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
+func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int, url string) *Tunnel {
 	tun := &Tunnel{
 		uuid:      uuid,
 		idx:       idx,
@@ -73,9 +76,11 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
 		cap:       cap,
 		writeLock: sync.Mutex{},
 		reqq:      newReqq(cap),
+		url:       url,
 	}
 
 	if err := tun.connect(); err != nil {
+		log.Warnf(" new turnnel faile %s", err.Error())
 		tun.tunmgr.onTunnelBroken(tun)
 	} else {
 		go tun.serveWebsocket()
@@ -85,9 +90,12 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int) *Tunnel {
 }
 
 func (t *Tunnel) connect() error {
-	url := t.tunmgr.url
-	url = fmt.Sprintf("%s?cap=%d&uuid=%s", url, t.cap, t.uuid)
-	conn, resp, err := websocket.DefaultDialer.Dial(url, nil)
+	url := fmt.Sprintf("%s?cap=%d&uuid=%s", t.url, t.cap, t.uuid)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
 	if err != nil {
 		if resp != nil {
 			body, _ := io.ReadAll(resp.Body)
@@ -101,10 +109,11 @@ func (t *Tunnel) connect() error {
 	return nil
 }
 
-func (t *Tunnel) closeWebsocket() error {
+func (t *Tunnel) destroy() error {
 	if t.conn != nil {
 		return t.conn.Close()
 	}
+	t.isDestroy = true
 
 	return nil
 }
@@ -135,6 +144,9 @@ func (t *Tunnel) onWebsocketClose() {
 		t.conn.Close()
 		t.conn = nil
 	}
+
+	t.reqq.cleanup()
+
 	t.tunmgr.onTunnelBroken(t)
 }
 
@@ -227,7 +239,8 @@ func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
 	log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
-		return fmt.Errorf("onServerRequestData can not find request, idx %d, tag %d", idx, tag)
+		// return fmt.Errorf("onServerRequestData can not find request, idx %d, tag %d", idx, tag)
+		return nil
 	}
 	return req.write(data)
 }

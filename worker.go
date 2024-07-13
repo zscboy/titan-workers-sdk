@@ -23,7 +23,7 @@ type Node struct {
 	ID     string `json:"NodeID"`
 	URL    string `json:"WsURL"`
 	Status int    `json:"status"`
-	AreaID string `json:"AreaID"`
+	AreaID string `json:"GeoID"`
 	IP     string `json:"IP"`
 }
 

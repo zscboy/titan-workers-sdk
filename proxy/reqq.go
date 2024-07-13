@@ -103,10 +103,10 @@ func (r *Reqq) reqCount() int {
 	return r.cap - r.freeCount
 }
 
-// func (r *Reqq) cleanup() {
-// 	for _, request := range r.requests {
-// 		if request.inused {
-// 			r.free(request.idx, request.tag)
-// 		}
-// 	}
-// }
+func (r *Reqq) cleanup() {
+	for _, request := range r.requests {
+		if request.inused {
+			r.free(request.idx, request.tag)
+		}
+	}
+}
