@@ -12,6 +12,7 @@ import (
 	"github.com/zscboy/titan-workers-sdk/config"
 	httpproxy "github.com/zscboy/titan-workers-sdk/http"
 	"github.com/zscboy/titan-workers-sdk/proxy"
+	"github.com/zscboy/titan-workers-sdk/socks5"
 	"github.com/zscboy/titan-workers-sdk/web"
 )
 
@@ -36,7 +37,9 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	logging.SetAllLoggers(logLevel)
 
-	// selector, err := newSampleSelector("ws://localhost:2345/project/e_23a42fb9-0ce7-43bb-9afd-af23c576dabc/tun")
+	// selector, err := newSampleSelector("ws://localhost:4000/tun")
+	// selector, err := newSampleSelector("wss://8cc13918-0380-4b80-8d4d-f385cd577cba.cassini-l1.titannet.io:2345/project/e_33536f04-142b-43db-ae50-06498cc9b8f9/4fd2d416-35cb-4c55-9faf-bee933094315/tun")
+	// selector, err := newSampleSelector("wss://5d284569-1a86-40f7-9887-5aff27cd1cbb.test.titannet.io:2345/project/e_85a7e089-0ce4-4337-94ca-763587a07f45/f33939a6-b7d8-4bd1-a189-53f5099f8b98/tun")
 	selector, err := newCustomSelector(cfg)
 	if err != nil {
 		return fmt.Errorf("newCustomSelector " + err.Error())
@@ -47,7 +50,7 @@ func run(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("newCustomSelector " + err.Error())
 	}
 
-	tunMgr := proxy.NewTunManager(uuid.NewString(), cfg.Tun.Count, cfg.Tun.Cap, url)
+	tunMgr := proxy.NewTunManager(uuid.NewString(), cfg.Tun.Count, cfg.Tun.Cap, url, "")
 	tunMgr.Startup()
 
 	go func() {
@@ -60,8 +63,8 @@ func run(cmd *cobra.Command, args []string) error {
 		localHttpServer.start()
 	}()
 
-	socks5Server := socks5Server{tunMgr: tunMgr}
-	socks5Server.startSocks5Server(cfg.Socks5.ListenAddress)
+	socks5Server := socks5.Socks5Server{OnConnect: tunMgr.OnAcceptRequest}
+	socks5Server.StartSocks5Server(cfg.Socks5.ListenAddress)
 
 	return nil
 }

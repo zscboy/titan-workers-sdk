@@ -16,6 +16,16 @@ func listProjects(cmd *cobra.Command, args []string) ([]*worker.Project, error) 
 		return nil, fmt.Errorf("Please specify the name of the config file")
 	}
 
+	page, err := cmd.Flags().GetInt("page")
+	if err != nil {
+		return nil, fmt.Errorf("Must set --page")
+	}
+
+	size, err := cmd.Flags().GetInt("size")
+	if size == 0 || err != nil {
+		return nil, fmt.Errorf("Must set --size")
+	}
+
 	configFilePath := args[0]
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		return nil, fmt.Errorf("%s does not exist.", configFilePath)
@@ -32,7 +42,7 @@ func listProjects(cmd *cobra.Command, args []string) ([]*worker.Project, error) 
 		return nil, fmt.Errorf("NewWorker %s", err.Error())
 	}
 
-	return w.GetProjects()
+	return w.GetProjects(page, size)
 
 }
 

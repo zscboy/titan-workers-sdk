@@ -1,12 +1,14 @@
 [server]
 user_name = "admin"
 password = "admin"
+#user_name = "workerd006"
+#password = "kgMZ2zPEMaQz"
 url = "http://120.79.221.36:10093"
 #url = "https://api-workerd-prod.container1.titannet.io"
 #url = "https://api-workerd.titannet.io"
 
 [node]
-id = "e_85a7e089-0ce4-4337-94ca-763587a07f45"
+id = "e_1a18d2f7-e2da-4943-ae6b-a4c2454b47df"
 
 [socks5]
 listenAddress = "127.0.0.1:1080"
@@ -21,6 +23,14 @@ listenAddress = "127.0.0.1:1082"
 [tun]
 count = 1
 cap = 100
+
+url = "wss://34a6e186-861d-49a6-8016-b7b8ea5ac8c4.cassini-l1.titannet.io:2345/project/e_aa5e5167-ce23-4697-bdff-c82f3a614578/61d610ad-42fb-4856-b34c-732a4bbb378c/tun"
+#url = "wss://2f94435d-51ef-48cb-b85e-6be05ae61928.cassini-l1.titannet.io:2345/project/e_4f5217b5-bc19-45b6-947f-b2d039788bdd/4b0b2de4-5274-48c6-b831-73cabf581823/tun"
+#url = "wss://e908199f-39cc-495a-9abb-becb4d8798b7.cassini-l1.titannet.io:2345/project/e_e36f05c7-f437-4c75-b478-817b33cc202c/f1cd28a0-de57-4789-a77e-88304e5a4df6/tun"
+#url = "wss://9959906a-a698-45a4-96ae-cd4b934ff00c.cassini-l1.titannet.io:2345/project/e_43e326d6-d9b3-474e-a40b-b678ba2b27d6/0ba11ef8-a177-43d0-a7da-f9031729300f/tun"
+#url = "ws://47.76.61.130:3000/tun"
+#authKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJBbGxvdyI6WyJsNSJdLCJJRCI6IiIsIk5vZGVJRCI6IiIsIkV4dGVuZCI6IiIsIkFjY2Vzc0NvbnRyb2xMaXN0IjpudWxsfQ.3f-oQrzkAhsfPSuqKanz96jPhY58JordCYKceGdGsmQ"
+#url = "wss://bd28c362-001f-4d60-8b34-e66c639db7a5.cassini-l1.titannet.io:2345/project/e_48aa1b45-f477-4574-9bfc-6dd6adfc1221/74c68081-0139-49e2-af8c-fc93d8ae22ab/tun"
 
 [Log]
 # debug or info

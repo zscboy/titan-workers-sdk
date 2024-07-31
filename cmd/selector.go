@@ -127,7 +127,7 @@ func (selector *customSelector) CurrentNode() *worker.Node {
 }
 
 func loadProjects(w worker.Worker) ([]*worker.PorjectInfo, error) {
-	projects, err := w.GetProjects()
+	projects, err := w.GetProjects(0, 50)
 	if err != nil {
 		return nil, err
 	}

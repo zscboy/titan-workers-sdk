@@ -12,7 +12,7 @@ import (
 var log = logging.Logger("proxy")
 
 const (
-	keepaliveIntervel = 15 * time.Second
+	keepaliveIntervel = 3 * time.Second
 	sortIntervel      = 3 * time.Second
 )
 
@@ -37,15 +37,18 @@ type TunMgr struct {
 	sortedTunnels  []*Tunnel
 	currentTunIdex int
 
-	reconnectsLock   sync.Mutex
-	url              string
+	reconnectsLock sync.Mutex
+
+	url     string
+	authKey string
+
 	cancelKeepAlive  chan bool
 	cancelSortTunnel chan bool
 	// ctx            context.Context
 	// ctxCancel      context.CancelFunc
 }
 
-func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string) *TunMgr {
+func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string, authKey string) *TunMgr {
 	if len(url) == 0 {
 		panic("url can not empty")
 	}
@@ -57,6 +60,7 @@ func NewTunManager(uuid string, tunnelCount, tunnelCap int, url string) *TunMgr 
 		reconnects:       make([]int, 0),
 		reconnectsLock:   sync.Mutex{},
 		url:              url,
+		authKey:          authKey,
 		cancelKeepAlive:  make(chan bool),
 		cancelSortTunnel: make(chan bool),
 	}
@@ -67,7 +71,7 @@ func (tm *TunMgr) Startup() {
 	tm.sortedTunnels = make([]*Tunnel, 0, tm.tunnelCount)
 
 	for i := 0; i < tm.tunnelCount; i++ {
-		tunnel := newTunnel(tm.uuid, i, tm, tm.tunnelCap, tm.url)
+		tunnel := newTunnel(tm.uuid, i, tm)
 		tm.tunnels = append(tm.tunnels, tunnel)
 		tm.sortedTunnels = append(tm.sortedTunnels, tunnel)
 	}
@@ -98,7 +102,7 @@ func (tm *TunMgr) RestartWith(url string) {
 	tm.sortedTunnels = make([]*Tunnel, 0, tm.tunnelCount)
 
 	for i := 0; i < tm.tunnelCount; i++ {
-		tunnel := newTunnel(tm.uuid, i, tm, tm.tunnelCap, tm.url)
+		tunnel := newTunnel(tm.uuid, i, tm)
 		tm.tunnels = append(tm.tunnels, tunnel)
 		tm.sortedTunnels = append(tm.sortedTunnels, tunnel)
 	}
@@ -238,13 +242,14 @@ func (tm *TunMgr) keepAlive() {
 	defer log.Infof("keepAlive exist")
 
 	ticker := time.NewTicker(keepaliveIntervel)
-
+	// log.Infof("start keepAlive,intervel %d", keepaliveIntervel)./ti
 	for {
 		select {
 		case <-tm.cancelKeepAlive:
 			return
 		case <-ticker.C:
 			length := len(tm.tunnels)
+			// log.Infof("ticker, tunnels len:%d", length)
 			for i := 0; i < length; i++ {
 				tun := tm.tunnels[i]
 				if !tun.isConnected() || tun.isDestroy {

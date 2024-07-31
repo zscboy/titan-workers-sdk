@@ -65,6 +65,16 @@ func execute() {
 
 	listNodesCmd.Flags().String("area-id", "", "Specifying the area-id to list node")
 	listNodesCmd.Flags().String("region", "", "Specifying the region to list node")
+	listNodesCmd.Flags().Int("page", 0, "Specifying the page of list")
+	listNodesCmd.Flags().Int("size", 20, "Specifying the size of page")
+
+	listTunnelsCmd.Flags().String("project-id", "", "Specifying the project id")
+
+	listProjectsCmd.Flags().Int("page", 0, "Specifying the page of list")
+	listProjectsCmd.Flags().Int("size", 20, "Specifying the size of page")
+
+	checkDelayCmd.Flags().Int("page", 0, "Specifying the page of list")
+	checkDelayCmd.Flags().Int("size", 20, "Specifying the size of page")
 
 	var rootCmd = &cobra.Command{}
 	rootCmd.AddCommand(versionCmd)
@@ -83,6 +93,8 @@ func execute() {
 	rootCmd.AddCommand(deleteProjectCmd)
 	rootCmd.AddCommand(setNodeCmd)
 	rootCmd.AddCommand(queryNodeCmd)
+	rootCmd.AddCommand(listTunnelsCmd)
+	rootCmd.AddCommand(checkDelayCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		log.Error(err)

@@ -17,40 +17,27 @@ import (
 type CMD int
 
 const (
-	cMDNone              = 0
-	cMDPing              = 1
-	cMDPong              = 2
-	cMReqBegin           = 3
-	cMDReqData           = 3
-	cMDReqCreated        = 4
-	cMDReqClientClosed   = 5
+	cMDNone    = 0
+	cMDPing    = 1
+	cMDPong    = 2
+	cMReqBegin = 3
+	// client and server use this cmd to send request's data
+	cMDReqData = 3
+	// client notify server that a new request has created
+	cMDReqCreated = 4
+	// client notify server that a request has closed
+	cMDReqClientClosed = 5
+	// client notify server that a request has finished, but not closed
 	cMDReqClientFinished = 6
+	// server notify client that a request has finished, but not closed
 	cMDReqServerFinished = 7
-	cMDReqServerClosed   = 8
-	cMDReqRefreshQuota   = 9
-	cMDReqEnd            = 10
+	// server notify client that a request has closed
+	cMDReqServerClosed = 8
+	// server notify client that a request quota has been refresh,
+	// means that client can send more data of this request
+	cMDReqRefreshQuota = 9
+	cMDReqEnd          = 10
 )
-
-// const CMD_None = 0;
-// const CMD_Ping = 1;
-// const CMD_Pong = 2;
-// const CMD_ReqBEGIN = 3;
-// // client and server use this cmd to send request's data
-// const CMD_ReqData = 3;
-// // client notify server that a new request has created
-// const CMD_ReqCreated = 4;
-// // client notify server that a request has closed
-// const CMD_ReqClientClosed = 5;
-// // client notify server that a request has finished, but not closed
-// const CMD_ReqClientFinished = 6;
-// // server notify client that a request has finished, but not closed
-// const CMD_ReqServerFinished = 7;
-// // server notify client that a request has closed
-// const CMD_ReqServerClosed = 8;
-// // server notify client that a request quota has been refresh,
-// // means that client can send more data of this request
-// const CMD_ReqRefreshQuota = 9;
-// const CMD_ReqEND = 10;
 
 const maxCap = 100
 
@@ -65,18 +52,20 @@ type Tunnel struct {
 	writeLock sync.Mutex
 	busy      int
 	url       string
+	authKey   string
 	isDestroy bool
 }
 
-func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int, url string) *Tunnel {
+func newTunnel(uuid string, idx int, tunmgr *TunMgr) *Tunnel {
 	tun := &Tunnel{
 		uuid:      uuid,
 		idx:       idx,
 		tunmgr:    tunmgr,
-		cap:       cap,
+		cap:       tunmgr.tunnelCap,
 		writeLock: sync.Mutex{},
-		reqq:      newReqq(cap),
-		url:       url,
+		reqq:      newReqq(tunmgr.tunnelCap),
+		url:       tunmgr.url,
+		authKey:   tunmgr.authKey,
 	}
 
 	if err := tun.connect(); err != nil {
@@ -92,19 +81,24 @@ func newTunnel(uuid string, idx int, tunmgr *TunMgr, cap int, url string) *Tunne
 func (t *Tunnel) connect() error {
 	url := fmt.Sprintf("%s?cap=%d&uuid=%s", t.url, t.cap, t.uuid)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, url, nil)
+	header := make(http.Header)
+	header.Add("Authorization", "Bearer "+t.authKey)
+	// header.Add("Relay", "wss://9959906a-a698-45a4-96ae-cd4b934ff00c.cassini-l1.titannet.io:2345")
+	header.Add("User-Timestamp", fmt.Sprintf("%d", time.Now().UnixMilli()))
+	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, url, header)
 	if err != nil {
 		if resp != nil {
 			body, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("dial %s failed %s, rsp: %s", url, err.Error(), string(body))
+			return fmt.Errorf("dial %s failed %s, rsp: %s,", url, err.Error(), string(body))
 		}
 		return fmt.Errorf("dial %s failed %s", url, err.Error())
 	}
 	t.conn = conn
 
+	log.Infof("response header: %#v", resp.Header)
 	log.Infof("new tun %s", url)
 	return nil
 }
@@ -209,9 +203,17 @@ func (t *Tunnel) isRequestCmd(cmd uint8) bool {
 }
 
 func (t *Tunnel) onPong(message []byte) error {
-	if len(message) != 9 {
-		return fmt.Errorf("message len != 9")
-	}
+	// if len(message) != 9 {
+	// 	return fmt.Errorf("message len != 9")
+	// }
+	// timestamps := make([]int64, 0)
+	// for i := 1; i < len(message); {
+	// 	data := message[i : i+8]
+	// 	timestamp := binary.LittleEndian.Uint64(data)
+	// 	timestamps = append(timestamps, int64(timestamp))
+	// }
+
+	// log.Infof("onPong len:%d", len(message))
 	return nil
 }
 
@@ -236,7 +238,7 @@ func (t *Tunnel) onTunnelRequestMessage(cmd uint8, message []byte) error {
 }
 
 func (t *Tunnel) onServerRequestData(idx, tag uint16, data []byte) error {
-	log.Infof("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
+	log.Debugf("onServerRequestData, idx:%d tag:%d, data len:%d", idx, tag, len(data))
 	req := t.reqq.getReq(idx, tag)
 	if req == nil {
 		// return fmt.Errorf("onServerRequestData can not find request, idx %d, tag %d", idx, tag)

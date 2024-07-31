@@ -41,6 +41,9 @@ type LocalHttpServer struct {
 type Tun struct {
 	Count int `toml:"count"`
 	Cap   int `toml:"cap"`
+
+	URL     string `toml:"url"`
+	AuthKey string `toml:"authKey"`
 }
 
 type Log struct {

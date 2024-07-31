@@ -66,7 +66,7 @@ func deploy(cmd *cobra.Command, args []string) error {
 	}
 
 	// fmt.Println("config ", *cfg)
-	fmt.Println("nodes ", nodes)
+	// fmt.Println("nodes ", nodes)
 
 	wConfig := &worker.Config{UserName: cfg.Server.UserName, Password: cfg.Server.Password, APIServer: cfg.Server.URL}
 	w, err := worker.NewWorker(wConfig)
@@ -76,6 +76,8 @@ func deploy(cmd *cobra.Command, args []string) error {
 
 	base := worker.ProjectBase{Name: name, BundleURL: bundleURL, Replicas: replicas}
 	req := &worker.ReqCreateProject{Region: region, ProjectBase: base, NodeIDs: nodes, AreaID: areaID, Expiration: expiration}
+	// json.Marshal(req)
+	// fmt.Printf("req %#v \n", *req)
+	// _ = w
 	return w.CreateProject(req)
-
 }

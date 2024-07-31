@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Titan worker</title>
+    <link rel="stylesheet" href="/static/styles.css">
+    <!-- <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script> -->
+     <script>
+        var nodeID = "{{.Node.ID}}";
+        var nodeAreaID = "{{.Node.AreaID}}";
+    </script>
+    <script src="/static/script.js"></script>
+</head>
+<body>
+	<div id="loader"></div>
+	<h1>Current node</h1>
+    <table border="1" style="border: 1px solid black; border-collapse: collapse;">
+        <tr>
+            <th>ID</th>
+            <th>AREA</th>
+			<th>IP</th>
+			<th>Status</th>
+        </tr>
+        <tr>
+            <td>{{.Node.ID}}</td>
+            <td>{{.Node.AreaID}}</td>
+			<td>{{.Node.IP}}</td>
+			<td>{{.Node.Status}}</td>
+        </tr>
+    </table>
+    <h1>Choose node</h3>
+    <form id="myForm" onsubmit="submitForm(event)">
+        <label for="areaSelect">Area &nbsp &nbsp&nbsp</label>
+        <select id="areaSelect" name="areaSelect" onchange="updateCountryOptions()" style="width: 300px;">
+            <option value="">--Select an area--</option>
+            {{range .Options}}
+                <option value="{{.Value}}">{{.Text}}</option>
+            {{end}}
+        </select>
+        <br><br>
+        <label for="countrySelect">Country</label>
+        <select id="countrySelect" name="countrySelect", onchange="updateNodeOptions()" style="width: 300px;">
+            <option value="">--Select a country--</option>
+        </select>
+        <br><br>
+		<label for="nodeSelect">Node &nbsp &nbsp</label>
+        <select id="nodeSelect" name="nodeSelect"  style="width: 300px;">
+            <option value="">--Select a node--</option>
+        </select>
+        <input type="submit" value="select node">
+		<br><br>
+    </form>
+</body>
+</html>

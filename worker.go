@@ -63,6 +63,13 @@ type ReqUpdatePorjct struct {
 	ProjectBase
 }
 
+type Tunnel struct {
+	ProjectID string `json:"project_id"`
+	NodeID    string `json:"node_id"`
+	Index     int    `json:"tunnel_index"`
+	WSURL     string `json:"ws_url"`
+}
+
 type Result struct {
 	Code    int         `json:"code"`
 	Data    interface{} `json:"data"`
@@ -79,12 +86,13 @@ type Worker interface {
 	// DeployProject() error
 	UpldateProject(req *ReqUpdatePorjct) error
 	CreateProject(req *ReqCreateProject) error
-	GetProjects() ([]*Project, error)
+	GetProjects(page, size int) ([]*Project, error)
 	DeleteProject(projectID string) error
 	GetProjectInfo(projectID string) (*PorjectInfo, error)
 	// area is asia,americas,europe,africa,oceania
 	GetRegions(area string) (*AreaList, error)
 	ListNodesWithRegions(areaID string, region string) ([]string, error)
+	GetTunnels(projectID string) ([]*Tunnel, error)
 }
 
 func NewWorker(cfg *Config) (Worker, error) {
@@ -201,8 +209,8 @@ func (w *worker) CreateProject(reqCreateProject *ReqCreateProject) error {
 	return nil
 }
 
-func (w *worker) GetProjects() ([]*Project, error) {
-	url := fmt.Sprintf("%s/api/v1/project/list", w.config.APIServer)
+func (w *worker) GetProjects(page, size int) ([]*Project, error) {
+	url := fmt.Sprintf("%s/api/v1/project/list?page=%d&size=%d", w.config.APIServer, page, size)
 	// Create a new HTTP GET request
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -441,6 +449,57 @@ func (w *worker) ListNodesWithRegions(areaID string, region string) ([]string, e
 	// }
 
 	return nil, nil
+}
+
+func (w *worker) GetTunnels(projectID string) ([]*Tunnel, error) {
+	url := fmt.Sprintf("%s/api/v1/project/tunnels?project_id=%s", w.config.APIServer, projectID)
+	// Create a new HTTP GET request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	// Add custom headers if needed
+	addHeaderToRequest(req, w.token)
+
+	// Send the request
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		buf, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("status code %d, %s", resp.StatusCode, string(buf))
+	}
+
+	// Read the response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	ret := Result{}
+	err = json.Unmarshal(body, &ret)
+	if err != nil {
+		return nil, err
+	}
+
+	if ret.Code != 0 {
+		return nil, fmt.Errorf(ret.Message)
+	}
+
+	data := struct {
+		Tunnels []*Tunnel `json:"tunnels"`
+	}{}
+
+	err = interfaceToStruct(ret.Data, &data)
+	if err != nil {
+		return nil, err
+	}
+	// fmt.Println("tunnel list ", string(body))
+	return data.Tunnels, nil
 }
 
 func (w *worker) login() error {
