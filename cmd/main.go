@@ -59,6 +59,7 @@ func execute() {
 	deployCmd.Flags().String("nodes", "", "Specifying the nodes to deploy project")
 	deployCmd.Flags().Int("replicas", 100, "Specifying the replicas")
 	deployCmd.Flags().String("expiration", "", "Specifying the expiration")
+	deployCmd.Flags().String("version", "", "Specifying the version")
 
 	projectInfoCmd.Flags().String("project-id", "", "Specifying the project id")
 	deleteProjectCmd.Flags().String("project-id", "", "Specifying the project id")

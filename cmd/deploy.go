@@ -1,8 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -51,6 +54,19 @@ func deploy(cmd *cobra.Command, args []string) error {
 		expiration = expireTime.Format("2006-01-02 15:04:05")
 	}
 
+	version, err := cmd.Flags().GetString("version")
+	if err != nil {
+		return err
+	}
+
+	ver := uint32(0)
+	if len(version) > 0 {
+		ver, err = versionToInt(version)
+		if err != nil {
+			return err
+		}
+
+	}
 	if len(args) == 0 {
 		return fmt.Errorf("Please specify the name of the config file")
 	}
@@ -75,9 +91,33 @@ func deploy(cmd *cobra.Command, args []string) error {
 	}
 
 	base := worker.ProjectBase{Name: name, BundleURL: bundleURL, Replicas: replicas}
-	req := &worker.ReqCreateProject{Region: region, ProjectBase: base, NodeIDs: nodes, AreaID: areaID, Expiration: expiration}
-	// json.Marshal(req)
-	// fmt.Printf("req %#v \n", *req)
+	req := &worker.ReqCreateProject{Region: region, ProjectBase: base, NodeIDs: nodes, AreaID: areaID, Expiration: expiration, Version: int(ver)}
+	buf, _ := json.Marshal(req)
+	fmt.Printf("req %s \n", string(buf))
 	// _ = w
 	return w.CreateProject(req)
+}
+
+func versionToInt(version string) (uint32, error) {
+	vers := strings.Split(version, ".")
+	if len(vers) != 3 {
+		return 0, fmt.Errorf("invalid version %s", version)
+	}
+
+	major, err := strconv.Atoi(vers[0])
+	if err != nil {
+		return 0, fmt.Errorf("parse version major %s failed %s", vers[0], err.Error())
+	}
+
+	minor, err := strconv.Atoi(vers[1])
+	if err != nil {
+		return 0, fmt.Errorf("parse version minor %s failed %s", vers[1], err.Error())
+	}
+
+	patch, err := strconv.Atoi(vers[2])
+	if err != nil {
+		return 0, fmt.Errorf("parse version patch %s failed %s", vers[2], err.Error())
+	}
+
+	return uint32(major)<<16 | uint32(minor)<<8 | uint32(patch), nil
 }

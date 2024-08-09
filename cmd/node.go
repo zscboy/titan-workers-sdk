@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
-	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/fatih/color"
+	"github.com/gorilla/websocket"
 	"github.com/spf13/cobra"
 	worker "github.com/zscboy/titan-workers-sdk"
 	"github.com/zscboy/titan-workers-sdk/config"
@@ -279,6 +280,7 @@ var checkDelayCmd = &cobra.Command{
 			return
 		}
 
+		delayInfos := make([]*DelayInfo, 0)
 		for _, info := range pInfos {
 
 			tuns, err := w.GetTunnels(info.ID)
@@ -296,61 +298,68 @@ var checkDelayCmd = &cobra.Command{
 				if len(node.URL) == 0 {
 					continue
 				}
-				url := fmt.Sprintf("%s/project/%s/%s/trace", node.URL, node.ID, info.ID)
-				if strings.Contains(url, "wss://") {
-					url = strings.Replace(url, "wss://", "https://", 1)
-				} else if strings.Contains(url, "ws://") {
-					url = strings.Replace(url, "ws://", "http://", 1)
+				url := fmt.Sprintf("%s/project/%s/%s/tun", node.URL, node.ID, info.ID)
+				delyaInfo, err := traceNode(url, node.URL)
+				if err != nil {
+					fmt.Println(err)
+					continue
 				}
-				fmt.Println(url)
-				traceNode(url, "")
+				delyaInfo.AreaID = node.AreaID
+
+				delayInfos = append(delayInfos, delyaInfo)
 			}
-			// break
+
+		}
+
+		// sort by delay time
+		sort.Slice(delayInfos, func(i, j int) bool {
+			return delayInfos[i].Delay < delayInfos[j].Delay
+		})
+
+		for _, delayInfo := range delayInfos {
+			fmt.Println(delayInfo.Info, delayInfo.AreaID)
 		}
 	},
 }
 
-func traceNode(url, relay string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Second)
+func traceNode(url, relay string) (*DelayInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	header := make(http.Header)
+	header.Set("User-Timestamp", fmt.Sprintf("%d", time.Now().UnixMilli()))
+	// header.Add("Relay", relay)
+
+	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, url, header)
 	if err != nil {
-		fmt.Println("err ", err.Error())
-		return
+		if resp != nil {
+			buf, _ := io.ReadAll(resp.Body)
+			fmt.Println("dial err ", err.Error(), string(buf), url)
+		} else {
+			fmt.Println("dial err ", err.Error(), url)
+		}
+		return nil, err
 	}
-	req.Header.Add("User-Timestamp", fmt.Sprintf("%d", time.Now().UnixMilli()))
-	// req.Header.Add("Relay", relay)
+	defer conn.Close()
 
-	transport := &http.Transport{
-		TLSNextProto: make(map[string]func(authority string, c *tls.Conn) http.RoundTripper),
-	}
-	client := &http.Client{
-		Transport: transport,
-	}
-
-	rsp, err := client.Do(req)
-	if err != nil {
-		fmt.Println("err ", err.Error())
-		return
-	}
-
-	body, _ := io.ReadAll(rsp.Body)
-	if rsp.StatusCode != 200 {
-		fmt.Println("status code %d, body %s, url %s", rsp.StatusCode, string(body), url)
-		return
-	}
-
-	fmt.Println(delayInfo(rsp.Header))
+	// fmt.Println("header ", resp.Header)
+	return delayInfo(resp.Header)
 }
 
-func delayInfo(header http.Header) string {
+type DelayInfo struct {
+	NodeID string
+	Delay  int64
+	Info   string
+	AreaID string
+}
+
+func delayInfo(header http.Header) (*DelayInfo, error) {
 	requestMap := make(map[string]int64)
 	userTimestamp := header.Get("User-timestamp")
 	userTimestampInt64, err := strconv.ParseInt(userTimestamp, 10, 64)
 	if err != nil {
-		fmt.Println("parse user timestamp error %s", err.Error())
-		return ""
+		fmt.Println("parse user timestamp error %s ", err.Error())
+		return nil, err
 	}
 
 	nodes := strings.Split(header.Get("Request-Nodes"), ",")
@@ -367,6 +376,7 @@ func delayInfo(header http.Header) string {
 
 	delayInfo := ""
 
+	edgeNodeID := ""
 	nodes = header.Values("Response-Nodes")
 	responseNodesTimestamps := header.Values("Response-Nodes-Timestamps")
 
@@ -379,9 +389,14 @@ func delayInfo(header http.Header) string {
 		nodeID := nodes[i]
 		delayInfo += "==>" + nodeID + "[" + fmt.Sprintf("%d", nodeTimestamp-requestMap[nodeID]) + "]"
 
-	}
-	delayInfo += "==>Client[" + fmt.Sprintf("%d", time.Now().UnixMilli()-userTimestampInt64) + "]"
+		if strings.Contains("e_", nodeID) {
+			edgeNodeID = nodeID
+		}
 
-	return delayInfo
+	}
+	delay := time.Now().UnixMilli() - userTimestampInt64
+	delayInfo += "==>Client[" + fmt.Sprintf("%d", delay) + "]"
+
+	return &DelayInfo{NodeID: edgeNodeID, Delay: delay, Info: delayInfo}, nil
 
 }

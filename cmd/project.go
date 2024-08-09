@@ -164,6 +164,8 @@ var projectInfoCmd = &cobra.Command{
 			fmt.Printf("%s %s\n", accessPoint.ID, accessPoint.URL)
 		}
 
+		fmt.Println("Total ", len(projectInfo.Nodes))
+
 	},
 }
 

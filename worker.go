@@ -56,6 +56,7 @@ type ReqCreateProject struct {
 	NodeIDs    string `json:"node_ids"`
 	AreaID     string `json:"area_id"`
 	Expiration string `json:"expiration"`
+	Version    int    `json:"version"`
 }
 
 type ReqUpdatePorjct struct {
@@ -347,12 +348,21 @@ func (w *worker) GetProjectInfo(projectID string) (*PorjectInfo, error) {
 		return nil, fmt.Errorf(ret.Message)
 	}
 
-	pinfo := PorjectInfo{}
-	if err := interfaceToStruct(ret.Data, &pinfo); err != nil {
+	pinfos := make([]*PorjectInfo, 0)
+	if err := interfaceToStruct(ret.Data, &pinfos); err != nil {
 		return nil, err
 	}
 
-	return &pinfo, nil
+	var projectInfo *PorjectInfo = nil
+	for _, pinfo := range pinfos {
+		if projectInfo == nil {
+			projectInfo = pinfo
+		} else {
+			projectInfo.Nodes = append(projectInfo.Nodes, pinfo.Nodes...)
+		}
+	}
+
+	return projectInfo, nil
 }
 
 func (w *worker) GetRegions(area string) (*AreaList, error) {
