@@ -12,7 +12,8 @@ type Config struct {
 	Http            Http            `toml:"http"`
 	LocalHttpServer LocalHttpServer `toml:"local_http_server"`
 	Tun             Tun             `toml:"tun"`
-	Log             Log             `toml:""`
+	Log             Log             `toml:"log"`
+	Selector        Selector        `toml:"selector"`
 }
 
 type Server struct {
@@ -24,6 +25,16 @@ type Server struct {
 type Node struct {
 	ID string `toml:"id"`
 	// Region string `toml:"region"`
+}
+
+// type IP struct {
+// 	Type string `toml:"type"`
+// }
+
+type Selector struct {
+	Type          string `toml:"type"`
+	AreaID        string `toml:"area_id"`
+	DefaultNodeID string `toml:"default_node_id"`
 }
 
 type Socks5 struct {

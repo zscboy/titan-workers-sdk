@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/google/uuid"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/zscboy/titan-workers-sdk/config"
 	httpproxy "github.com/zscboy/titan-workers-sdk/http"
 	"github.com/zscboy/titan-workers-sdk/proxy"
+	"github.com/zscboy/titan-workers-sdk/selector"
 	"github.com/zscboy/titan-workers-sdk/socks5"
 )
 
@@ -42,7 +42,8 @@ func run(args []string) error {
 	}
 	logging.SetAllLoggers(logLevel)
 
-	tunMgr := proxy.NewTunManager(uuid.NewString(), cfg.Tun.Count, cfg.Tun.Cap, cfg.Tun.URL, cfg.Tun.AuthKey)
+	tunInfos := []*selector.TunInfo{{URL: cfg.Tun.URL, Auth: cfg.Tun.AuthKey}}
+	tunMgr := proxy.NewTunManager(cfg.Tun.Count, cfg.Tun.Cap, selector.NewFixSelector(tunInfos))
 	tunMgr.Startup()
 
 	go func() {

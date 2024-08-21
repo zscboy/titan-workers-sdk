@@ -7,8 +7,10 @@ url = "http://120.79.221.36:10093"
 #url = "https://api-workerd-prod.container1.titannet.io"
 #url = "https://api-workerd.titannet.io"
 
-[node]
-id = "e_1a18d2f7-e2da-4943-ae6b-a4c2454b47df"
+[selector]
+type = "auto"
+area_id = "Asia-China-Guangdong-Shenzhen"
+default_node_id = ""
 
 [socks5]
 listenAddress = "127.0.0.1:1080"
@@ -21,10 +23,10 @@ listenAddress = "127.0.0.1:1081"
 listenAddress = "127.0.0.1:1082"
 
 [tun]
-count = 1
+count = 5
 cap = 100
 
-url = "wss://34a6e186-861d-49a6-8016-b7b8ea5ac8c4.cassini-l1.titannet.io:2345/project/e_aa5e5167-ce23-4697-bdff-c82f3a614578/61d610ad-42fb-4856-b34c-732a4bbb378c/tun"
+url = "wss://5d284569-1a86-40f7-9887-5aff27cd1cbb.test.titannet.io:2345/project/e_85a7e089-0ce4-4337-94ca-763587a07f45/52601750-80a4-47fb-a7c9-f44aa1694729/tun"
 #url = "wss://2f94435d-51ef-48cb-b85e-6be05ae61928.cassini-l1.titannet.io:2345/project/e_4f5217b5-bc19-45b6-947f-b2d039788bdd/4b0b2de4-5274-48c6-b831-73cabf581823/tun"
 #url = "wss://e908199f-39cc-495a-9abb-becb4d8798b7.cassini-l1.titannet.io:2345/project/e_e36f05c7-f437-4c75-b478-817b33cc202c/f1cd28a0-de57-4789-a77e-88304e5a4df6/tun"
 #url = "wss://9959906a-a698-45a4-96ae-cd4b934ff00c.cassini-l1.titannet.io:2345/project/e_43e326d6-d9b3-474e-a40b-b678ba2b27d6/0ba11ef8-a177-43d0-a7da-f9031729300f/tun"
@@ -35,3 +37,4 @@ url = "wss://34a6e186-861d-49a6-8016-b7b8ea5ac8c4.cassini-l1.titannet.io:2345/pr
 [Log]
 # debug or info
 level = "debug"
+

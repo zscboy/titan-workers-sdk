@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+	"github.com/zscboy/titan-workers-sdk/selector"
 )
 
 type CMD int
@@ -40,10 +41,11 @@ const (
 )
 
 const maxCap = 100
+const maxDelays = 10
 
 type Tunnel struct {
-	uuid   string
-	idx    int
+	uuid string
+	// idx    int
 	tunmgr *TunMgr
 	cap    int
 	conn   *websocket.Conn
@@ -51,31 +53,43 @@ type Tunnel struct {
 	reqq      *Reqq
 	writeLock sync.Mutex
 	busy      int
-	url       string
-	authKey   string
-	isDestroy bool
+
+	url          string
+	relays       []string
+	authKey      string
+	targetNodeID string
+
+	isDestroy    bool
+	lastPongTime time.Time
+	// save last 10 delay, calculation of average values
+	delays []int
 }
 
-func newTunnel(uuid string, idx int, tunmgr *TunMgr) *Tunnel {
+func newTunnel(uuid string, tunmgr *TunMgr, tunCap int, tunInfo *selector.TunInfo) (*Tunnel, error) {
 	tun := &Tunnel{
-		uuid:      uuid,
-		idx:       idx,
-		tunmgr:    tunmgr,
-		cap:       tunmgr.tunnelCap,
-		writeLock: sync.Mutex{},
-		reqq:      newReqq(tunmgr.tunnelCap),
-		url:       tunmgr.url,
-		authKey:   tunmgr.authKey,
+		uuid: uuid,
+		// idx:       idx,
+		tunmgr:       tunmgr,
+		cap:          tunCap,
+		writeLock:    sync.Mutex{},
+		reqq:         newReqq(tunCap),
+		url:          tunInfo.URL,
+		relays:       tunInfo.Relays,
+		authKey:      tunInfo.Auth,
+		targetNodeID: tunInfo.NodeID,
+
+		lastPongTime: time.Now(),
 	}
 
 	if err := tun.connect(); err != nil {
 		log.Warnf(" new turnnel faile %s", err.Error())
-		tun.tunmgr.onTunnelBroken(tun)
+		// tun.tunmgr.onTunnelBroken(tun)
+		return nil, err
 	} else {
 		go tun.serveWebsocket()
 	}
 
-	return tun
+	return tun, nil
 }
 
 func (t *Tunnel) connect() error {
@@ -88,6 +102,10 @@ func (t *Tunnel) connect() error {
 	header.Add("Authorization", "Bearer "+t.authKey)
 	// header.Add("Relay", "wss://9959906a-a698-45a4-96ae-cd4b934ff00c.cassini-l1.titannet.io:2345")
 	header.Add("User-Timestamp", fmt.Sprintf("%d", time.Now().UnixMilli()))
+	for _, relay := range t.relays {
+		header.Add("Relay", relay)
+	}
+
 	conn, resp, err := websocket.DefaultDialer.DialContext(ctx, url, header)
 	if err != nil {
 		if resp != nil {
@@ -98,7 +116,7 @@ func (t *Tunnel) connect() error {
 	}
 	t.conn = conn
 
-	log.Infof("response header: %#v", resp.Header)
+	// log.Infof("response header: %#v", resp.Header)
 	log.Infof("new tun %s", url)
 	return nil
 }
@@ -203,17 +221,19 @@ func (t *Tunnel) isRequestCmd(cmd uint8) bool {
 }
 
 func (t *Tunnel) onPong(message []byte) error {
-	// if len(message) != 9 {
-	// 	return fmt.Errorf("message len != 9")
-	// }
-	// timestamps := make([]int64, 0)
-	// for i := 1; i < len(message); {
-	// 	data := message[i : i+8]
-	// 	timestamp := binary.LittleEndian.Uint64(data)
-	// 	timestamps = append(timestamps, int64(timestamp))
-	// }
+	if len(message) != 9 {
+		return fmt.Errorf("message len != 9")
+	}
+	timestamp := binary.LittleEndian.Uint64(message[1:])
+	delay := time.Now().UnixMilli() - int64(timestamp)
+	t.delays = append(t.delays, int(delay))
 
-	// log.Infof("onPong len:%d", len(message))
+	if len(t.delays) > 10 {
+		length := len(t.delays)
+		t.delays = t.delays[length-maxDelays:]
+	}
+
+	t.lastPongTime = time.Now()
 	return nil
 }
 

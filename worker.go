@@ -94,6 +94,8 @@ type Worker interface {
 	GetRegions(area string) (*AreaList, error)
 	ListNodesWithRegions(areaID string, region string) ([]string, error)
 	GetTunnels(projectID string) ([]*Tunnel, error)
+
+	LoadProjects(page, size int) ([]*PorjectInfo, error)
 }
 
 func NewWorker(cfg *Config) (Worker, error) {
@@ -603,4 +605,58 @@ func addHeaderToRequest(req *http.Request, token string) {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("cache-control", "no-cache")
 	req.Header.Add("jwtAuthorization", "Bearer "+token)
+}
+
+func (w *worker) LoadProjects(page, size int) ([]*PorjectInfo, error) {
+	projects, err := w.GetProjects(page, size)
+	if err != nil {
+		return nil, err
+	}
+
+	projectInfos := make([]*PorjectInfo, 0)
+	for _, project := range projects {
+		projectInfo, err := w.GetProjectInfo(project.ID)
+		if err != nil {
+			fmt.Printf("GetProjectInfo %s %s\n", project.AreaID, err.Error())
+			continue
+		}
+		projectInfos = append(projectInfos, projectInfo)
+	}
+
+	count := 0
+	serviceStatus := 1
+	pInfos := make([]*PorjectInfo, 0)
+
+	for _, projectInfo := range projectInfos {
+		nodes := make([]*Node, 0)
+		for _, ap := range projectInfo.Nodes {
+			if ap.Status != serviceStatus {
+				continue
+			}
+
+			if len(ap.URL) == 0 {
+				continue
+			}
+
+			nodes = append(nodes, ap)
+			count++
+		}
+
+		if len(nodes) == 0 {
+			continue
+		}
+
+		info := &PorjectInfo{
+			ID:        projectInfo.ID,
+			Name:      projectInfo.Name,
+			BundleURL: projectInfo.BundleURL,
+			AreaID:    projectInfo.AreaID,
+			Replicas:  projectInfo.Replicas,
+			Nodes:     nodes,
+		}
+		pInfos = append(pInfos, info)
+
+	}
+
+	return pInfos, nil
 }

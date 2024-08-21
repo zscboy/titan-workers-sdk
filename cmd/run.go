@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/google/uuid"
 	logging "github.com/ipfs/go-log/v2"
 	"github.com/spf13/cobra"
+	worker "github.com/zscboy/titan-workers-sdk"
 	"github.com/zscboy/titan-workers-sdk/config"
-	httpproxy "github.com/zscboy/titan-workers-sdk/http"
 	"github.com/zscboy/titan-workers-sdk/proxy"
+	"github.com/zscboy/titan-workers-sdk/selector"
 	"github.com/zscboy/titan-workers-sdk/socks5"
 	"github.com/zscboy/titan-workers-sdk/web"
 )
@@ -37,29 +37,52 @@ func run(cmd *cobra.Command, args []string) error {
 	}
 	logging.SetAllLoggers(logLevel)
 
-	// selector, err := newSampleSelector("ws://localhost:4000/tun")
-	// selector, err := newSampleSelector("wss://8cc13918-0380-4b80-8d4d-f385cd577cba.cassini-l1.titannet.io:2345/project/e_33536f04-142b-43db-ae50-06498cc9b8f9/4fd2d416-35cb-4c55-9faf-bee933094315/tun")
-	// selector, err := newSampleSelector("wss://5d284569-1a86-40f7-9887-5aff27cd1cbb.test.titannet.io:2345/project/e_85a7e089-0ce4-4337-94ca-763587a07f45/f33939a6-b7d8-4bd1-a189-53f5099f8b98/tun")
-	selector, err := newCustomSelector(cfg)
+	wConfig := &worker.Config{UserName: cfg.Server.UserName, Password: cfg.Server.Password, APIServer: cfg.Server.URL}
+	w, err := worker.NewWorker(wConfig)
 	if err != nil {
-		return fmt.Errorf("newCustomSelector " + err.Error())
+		return err
 	}
 
-	url, err := selector.GetNodeURL()
+	pInfos, err := loadProjects(w)
 	if err != nil {
-		return fmt.Errorf("newCustomSelector " + err.Error())
+		return err
 	}
 
-	tunMgr := proxy.NewTunManager(uuid.NewString(), cfg.Tun.Count, cfg.Tun.Cap, url, "")
+	node := filterNodeOrFirst(cfg.Selector.DefaultNodeID, pInfos)
+	// copy a value from node, can not refrence to node
+	currentNode := &worker.Node{ID: node.ID, URL: node.URL, Status: node.Status, AreaID: node.AreaID, IP: node.IP}
+
+	var ts selector.TunSelector
+	if cfg.Selector.Type == selector.TypeAuto {
+		ts, err = selector.NewAutoSelector(w, cfg.Selector.AreaID)
+		if err != nil {
+			return err
+		}
+	} else if cfg.Selector.Type == selector.TypeFix {
+		ts = selector.NewWebSelector(currentNode, pInfos)
+		if err != nil {
+			return err
+		}
+	} else {
+		return fmt.Errorf("Selector type %s not found", cfg.Selector.Type)
+	}
+
+	// tunInfos := []*selector.TunInfo{{URL: cfg.Tun.URL, Auth: cfg.Tun.AuthKey}}
+	tunMgr := proxy.NewTunManager(cfg.Tun.Count, cfg.Tun.Cap, ts)
 	tunMgr.Startup()
 
-	go func() {
-		httpProxy := httpproxy.NewProxyServer(cfg.Http.ListenAddress, tunMgr)
-		httpProxy.Start()
-	}()
+	// go func() {
+	// 	httpProxy := httpproxy.NewProxyServer(cfg.Http.ListenAddress, tunMgr)
+	// 	httpProxy.Start()
+	// }()
 
 	go func() {
-		localHttpServer := LocalHttpServer{address: cfg.LocalHttpServer.ListenAddress, tunMgr: tunMgr, selector: selector}
+		localHttpServer := LocalHttpServer{
+			address:        cfg.LocalHttpServer.ListenAddress,
+			tunMgr:         tunMgr,
+			pInfos:         pInfos,
+			currentUseNode: currentNode,
+		}
 		localHttpServer.start()
 	}()
 
@@ -69,10 +92,50 @@ func run(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func loadProjects(w worker.Worker) ([]*worker.PorjectInfo, error) {
+	page := 0
+	size := 50
+	pInfos := make([]*worker.PorjectInfo, 0)
+	for {
+		projectInfos, err := w.LoadProjects(page, size)
+		if err != nil {
+			return nil, err
+		}
+
+		pInfos = append(pInfos, projectInfos...)
+		if len(projectInfos) < size {
+			break
+		}
+		page++
+	}
+
+	return pInfos, nil
+}
+
+func filterNodeOrFirst(nodeID string, pInfos []*worker.PorjectInfo) *worker.Node {
+	for _, pInfo := range pInfos {
+		for _, node := range pInfo.Nodes {
+			if node.ID == nodeID {
+				return node
+			}
+		}
+	}
+
+	for _, pInfo := range pInfos {
+		for _, node := range pInfo.Nodes {
+			return node
+		}
+	}
+
+	return nil
+}
+
 type LocalHttpServer struct {
-	address  string
-	tunMgr   *proxy.TunMgr
-	selector *customSelector
+	address string
+	tunMgr  *proxy.TunMgr
+	// selector *selector.WebSelector
+	pInfos         []*worker.PorjectInfo
+	currentUseNode *worker.Node
 }
 
 func (local *LocalHttpServer) chnodeHandler(w http.ResponseWriter, r *http.Request) {
@@ -83,26 +146,44 @@ func (local *LocalHttpServer) chnodeHandler(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	log.Infof("chnodeHandler id %d", nodeID)
-	if local.selector.currentUseNode != nil {
-		if local.selector.currentUseNode.ID == nodeID {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte("node is in use"))
-			return
-		}
-	}
-
-	url, err := local.selector.FindNode(nodeID)
-	if err != nil {
+	if local.currentUseNode != nil && local.currentUseNode.ID == nodeID {
 		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte(err.Error()))
+		w.Write([]byte("node is in use"))
 		return
 	}
 
-	local.tunMgr.RestartWith(url)
+	node, tunInfo := local.findTunInfo(nodeID)
+	if tunInfo == nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Can not find node %s", nodeID)))
+		return
+	}
+
+	err := local.tunMgr.Reset(tunInfo)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		w.Write([]byte(fmt.Sprintf("Set node failed %s", err.Error())))
+		return
+	}
+
+	*(local.currentUseNode) = node
+}
+
+func (local *LocalHttpServer) findTunInfo(nodeID string) (worker.Node, *selector.TunInfo) {
+	for _, pInfo := range local.pInfos {
+		for _, node := range pInfo.Nodes {
+			if node.ID == nodeID {
+				url := fmt.Sprintf("%s/project/%s/%s/tun", node.URL, node.ID, pInfo.ID)
+
+				return *node, &selector.TunInfo{NodeID: node.ID, URL: url}
+			}
+		}
+	}
+	return worker.Node{}, nil
 }
 
 func (local *LocalHttpServer) lsnodeHandler(w http.ResponseWriter, r *http.Request) {
-	buf, err := json.Marshal(local.selector.pInfos)
+	buf, err := json.Marshal(local.pInfos)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte(err.Error()))
@@ -113,7 +194,7 @@ func (local *LocalHttpServer) lsnodeHandler(w http.ResponseWriter, r *http.Reque
 }
 
 func (local *LocalHttpServer) queryHandler(w http.ResponseWriter, r *http.Request) {
-	node := local.selector.CurrentNode()
+	node := local.currentUseNode
 	if node == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("no node exist"))
@@ -130,7 +211,7 @@ func (local *LocalHttpServer) queryHandler(w http.ResponseWriter, r *http.Reques
 }
 
 func (local *LocalHttpServer) webHandler(w http.ResponseWriter, r *http.Request) {
-	node := local.selector.CurrentNode()
+	node := local.currentUseNode
 	if node == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("no node exist"))
@@ -152,7 +233,7 @@ func (local *LocalHttpServer) start() {
 	mux.HandleFunc("/ls", local.lsnodeHandler)
 	mux.HandleFunc("/query", local.queryHandler)
 
-	w := web.NewWeb(local.selector.pInfos, local.selector.currentUseNode)
+	w := web.NewWeb(local.pInfos, local.currentUseNode)
 	mux.HandleFunc("/web", w.WebHandler)
 	mux.HandleFunc("/web/getCountryOptions", w.GetCountryOptions)
 	mux.HandleFunc("/web/getNodeOptions", w.GetNodeOptions)

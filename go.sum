@@ -46,6 +46,8 @@ github.com/zscboy/go-socks5 v0.0.0-20240527080044-e1fdcd26cab7 h1:qcSCpsAr1IdNtE
 github.com/zscboy/go-socks5 v0.0.0-20240527080044-e1fdcd26cab7/go.mod h1:7L09CTe/4NTDQKTZV8YgqbRAcH5SZ7gIBV8cwrZKCQg=
 github.com/zscboy/go-socks5 v0.0.0-20240527080549-5cffc9a546d2 h1:UMiKQzPTrgnozqazJ+t+UzbQNbA3TKqsKUHIWmRwzso=
 github.com/zscboy/go-socks5 v0.0.0-20240527080549-5cffc9a546d2/go.mod h1:7L09CTe/4NTDQKTZV8YgqbRAcH5SZ7gIBV8cwrZKCQg=
+github.com/zscboy/go-socks5 v0.0.0-20240816043213-1cdf6ccffd30 h1:ZZPizmlKnxjbF6DWSPHhf3ydXPCBI/i1WtprM05yU9c=
+github.com/zscboy/go-socks5 v0.0.0-20240816043213-1cdf6ccffd30/go.mod h1:7L09CTe/4NTDQKTZV8YgqbRAcH5SZ7gIBV8cwrZKCQg=
 go.uber.org/atomic v1.7.0 h1:ADUqmZGgLDDfbSL9ZmPxKTybcoEYHgpYfELNoN+7hsw=
 go.uber.org/atomic v1.7.0/go.mod h1:fEN4uk6kAWBTFdckzkM89CLk9XfWZrxpCo0nPH17wJc=
 go.uber.org/goleak v1.1.11-0.20210813005559-691160354723/go.mod h1:cwTWslyiVhfpKIDGSZEM2HlOvcqm+tG4zioyIeLoqMQ=
